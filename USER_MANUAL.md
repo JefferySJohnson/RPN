@@ -23,7 +23,7 @@ The screen has two parts:
 
 ## Keyboard layout
 
-The keys are arranged to match a classic HP-41-style RPN calculator: **Enter** and **±** sit in their own row directly under the scientific functions (with backspace next to them), and the arithmetic operators **÷ × − +** sit in the *left* column of the number pad, with the digits filling the columns to their right — for example the top numeric row reads `÷ 7 8 9`.
+The keys are arranged to match a classic HP-41-style RPN calculator: **Enter** and **±** sit in their own row directly under the scientific functions (with backspace next to them), and the arithmetic operators **− + × ÷** sit in the *left* column of the number pad, with the digits filling the columns to their right — for example the top numeric row reads `− 7 8 9`.
 
 ## Basic entry
 
@@ -31,13 +31,15 @@ The keys are arranged to match a classic HP-41-style RPN calculator: **Enter** a
 |---|---|
 | Type a number | Tap the digit keys |
 | Decimal point | `.` |
-| Push a number onto the stack | **Enter ↵** |
+| Push a number onto the stack | **Enter ↑** |
 | Change sign | **±** |
 | Delete last digit typed | **⌫** (backspace) |
 | Clear what you're typing | **CE** |
 | Clear everything | **AC** |
 
 Tip: pressing **Enter** with nothing typed duplicates the current value — handy for reusing a number twice in a row (e.g., `5 Enter Enter ×` gives `25`).
+
+Note: you don't actually have to press Enter before an operator or function — typing a number and pressing `+` (or `sin`, `√x`, etc.) directly pushes it first automatically. Both the explicit push and the operator/result show up on the tape either way (see below).
 
 ## Operators
 
@@ -99,6 +101,19 @@ The calculator responds to your physical keyboard when the page has focus:
 ## Errors
 
 Dividing by zero or taking the log/root of an invalid value shows **Error** on the display. Press **CE** or **AC** to recover.
+
+## Tape
+
+Below the keypad is a running printout, styled like a paper adding-machine tape, of everything that's happened: every number pushed onto the stack and every operation's result, with the operator or function name on the left. Pressing **AC** doesn't erase the tape — it prints a `--- C ---` marker and keeps going, the same way clearing a physical adding machine doesn't tear off the paper.
+
+Two buttons sit above the tape:
+
+| Button | What it does |
+|---|---|
+| Export .txt | Downloads the entire tape as a plain-text file, named with the current date and time |
+| Clear tape | Erases the on-screen tape (does not affect the calculator's stack) |
+
+The exported file lists each line as the operation/label followed by its value, in the same top-to-bottom order they occurred — handy for keeping a record of a calculation after the fact.
 
 ## Installing it as an app
 

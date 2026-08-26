@@ -48,7 +48,7 @@ Y/Z/T map to the next items down the stack. The UI's `render()` function in the 
 |---|---|
 | `inputDigit(d)` | Appends a digit to `entry` (replaces a lone leading `"0"`) |
 | `inputDecimal()` | Adds `.` to `entry` if not already present |
-| `enter()` | Pushes `entry` onto `stack` and clears it; if `entry` is empty, duplicates the top of `stack` (matches physical RPN calculator behavior) |
+| `enter()` | Pushes `entry` onto `stack` via `pushPendingIfAny()` and clears it; if `entry` is empty, duplicates the top of `stack` (matches physical RPN calculator behavior) |
 | `backspace()` | Removes the last character of `entry`; if `entry` is empty, pops the stack and reloads it into `entry` minus its last digit (allows editing an already-pushed value) |
 | `toggleSign()` | Negates `entry` if pending, otherwise negates the top of `stack` |
 | `binaryOp(op)` | Auto-pushes any pending `entry` first, then pops **y** (top) then **x** (next), computes `x op y`, pushes the result. This ordering is what makes non-commutative operations (subtraction, division, power) behave correctly: the first number typed is always the left-hand operand. |
@@ -72,11 +72,28 @@ Y/Z/T map to the next items down the stack. The UI's `render()` function in the 
 
 `toRad()` / `fromRad()` convert based on `angleMode` before/after calling `Math.sin/cos/tan/asin/acos/atan`. Only affects trig functions; everything else is unit-agnostic.
 
+### Tape / history
+
+`history` is an array of `{ label, value }` entries (numbers pushed, operation results) or `{ marker: true, text }` entries (currently just the `"C"` marker `clearAll()` writes). Two things log to it:
+
+- **`pushPendingIfAny()`** — the shared helper called by `binaryOp`, `unaryFn`, `pushConst`, `percent`, `drop`, and `swap` before they touch the stack — logs the pushed value with an empty label whenever it actually pushes something. This is what makes the tape show a number even when the user never explicitly pressed Enter (e.g., typing `4` then `+` directly).
+- Each operation function (`binaryOp`, `unaryFn`, `pushConst`, `percent`) additionally calls `logEntry()` itself once it has a result, using a small lookup (`OP_SYMBOLS`, `UNARY_SYMBOLS`) to turn the internal op/function name into the same symbol shown on its button (e.g. `sub` → `−`, `sqrt` → `√x`).
+
+`clearAll()` calls `logMarker("C")` but does **not** clear `history` — the tape is meant to behave like a physical adding-machine tape that keeps printing across register clears. Clearing the visible tape is a separate, explicit action: `clearTape()` empties `history` outright and is only ever called from the UI's "Clear tape" button, never internally.
+
+`getHistory()` returns a shallow copy of the array for rendering/export; callers can't mutate internal state through it.
+
 ## UI layer
 
 - Buttons are plain `<button>` elements with `data-action` (and secondary `data-digit` / `data-op` / `data-fn` / `data-const`) attributes. A single delegated `click` listener on `.keys` dispatches to `handleAction()`, which calls the matching `RPN` method then re-renders.
 - Keyboard input is handled by a `keydown` listener mapping standard keys (digits, `.`, Enter/Space, Backspace, Esc, Delete, `+ - * / ^ %`) to the same `RPN` calls.
-- `render()` is the only function that touches the DOM for calculator state — it's called after every action, keeping state and view in sync without a framework.
+- `render()` is the only function that touches the DOM for calculator state — it's called after every action, keeping state and view in sync without a framework. It also calls `renderTape()` at the end of every render pass.
+
+### Tape rendering and export
+
+`renderTape()` rebuilds the `#tape` element from `RPN.getHistory()` on every render: each `{ label, value }` entry becomes a `.tape-row` (label left, value right), each `{ marker }` entry becomes a centered `.tape-marker` line, and the panel auto-scrolls to the bottom afterward.
+
+`exportTape()` (wired to the "Export .txt" button) formats the same history array as plain text — `${label.padEnd(6)}${value.padStart(12)}` per line, `--- text ---` for markers — joins it into one string, and triggers a download via a `Blob` + temporary `<a download>` element (no server round-trip). The filename is timestamped (`rpn-tape-YYYYMMDD-HHMMSS.txt`) so repeated exports don't overwrite each other. The "Clear tape" button just calls `RPN.clearTape()` followed by `renderTape()`.
 
 ### Key grid order
 
@@ -87,7 +104,7 @@ The `.keys` grid in `index.html` is a 4-column CSS grid with no explicit `grid-r
 3. Logs/roots: ln, log, √x, x²
 4. Constants/exponents: π, e, eˣ, yˣ
 5. **Enter** (2-col span), **±**, **⌫** — the entry-control row, positioned directly under the scientific rows rather than at the bottom
-6. Four numeric rows, each with the operator in the *leftmost* column and digits filling the rest: `÷ 7 8 9`, `× 4 5 6`, `− 1 2 3`, `+ 0 . %`
+6. Four numeric rows, each with the operator in the *leftmost* column and digits filling the rest: `− 7 8 9`, `+ 4 5 6`, `× 1 2 3`, `÷ 0 . %`
 
 Because placement is purely DOM order plus a plain grid flow, reordering keys is a matter of moving `<button>` elements in `index.html` — no CSS grid-line math required, except for the `.key.enter { grid-column: span 2; }` rule.
 
@@ -144,4 +161,5 @@ A test pass covering basic arithmetic, non-commutative operand order, trig with 
 
 - **New functions:** add a `case` to `unaryFn()` or `binaryOp()` in the `RPN` module, then add a corresponding button in `index.html` with the matching `data-fn`/`data-op` value. No other wiring needed — the delegated click handler and keyboard map already route by `dataset`.
 - **Memory registers (M+, MR, MC):** would need a new `memory` variable in the `RPN` module plus three new methods, following the same pattern as the existing stack operations.
-- **History/undo:** not currently implemented; would require snapshotting `stack`/`entry` before each mutating call.
+- **Undo:** the tape (`history`) is an append-only log for display/export, not a snapshot stack, so it can't drive undo as-is. True undo would need a separate stack of `stack`/`entry` snapshots taken before each mutating call.
+- **CSV/XLSX export:** `exportTape()` already isolates all the formatting logic in one function — swapping the plain-text `join("\n")` for comma-separated rows (or a library like SheetJS for a real `.xlsx`) wouldn't touch the logging side at all.

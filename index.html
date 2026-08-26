@@ -52,29 +52,40 @@
     <button class="key sci" data-action="fn" data-fn="exp">eˣ</button>
     <button class="key op" data-action="op" data-op="pow">yˣ</button>
 
-    <button class="key enter" data-action="enter">Enter ↵</button>
+    <button class="key enter" data-action="enter">Enter ↑</button>
     <button class="key num" data-action="sign">±</button>
     <button class="key fn" data-action="backspace">⌫</button>
 
-    <button class="key op" data-action="op" data-op="div">÷</button>
+    <button class="key op" data-action="op" data-op="sub">−</button>
     <button class="key num" data-action="digit" data-digit="7">7</button>
     <button class="key num" data-action="digit" data-digit="8">8</button>
     <button class="key num" data-action="digit" data-digit="9">9</button>
 
-    <button class="key op" data-action="op" data-op="mul">×</button>
+    <button class="key op" data-action="op" data-op="add">+</button>
     <button class="key num" data-action="digit" data-digit="4">4</button>
     <button class="key num" data-action="digit" data-digit="5">5</button>
     <button class="key num" data-action="digit" data-digit="6">6</button>
 
-    <button class="key op" data-action="op" data-op="sub">−</button>
+    <button class="key op" data-action="op" data-op="mul">×</button>
     <button class="key num" data-action="digit" data-digit="1">1</button>
     <button class="key num" data-action="digit" data-digit="2">2</button>
     <button class="key num" data-action="digit" data-digit="3">3</button>
 
-    <button class="key op" data-action="op" data-op="add">+</button>
+    <button class="key op" data-action="op" data-op="div">÷</button>
     <button class="key num" data-action="digit" data-digit="0">0</button>
     <button class="key num" data-action="decimal">.</button>
     <button class="key sci" data-action="percent">%</button>
+  </div>
+
+  <div class="tape-panel">
+    <div class="tape-header">
+      <span class="tape-title">Tape</span>
+      <div class="tape-actions">
+        <button id="exportTape" class="pill" type="button">Export .txt</button>
+        <button id="clearTape" class="pill" type="button">Clear tape</button>
+      </div>
+    </div>
+    <div class="tape" id="tape"></div>
   </div>
 </div>
 

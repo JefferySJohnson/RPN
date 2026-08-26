@@ -8,6 +8,23 @@ const RPN = (() => {
   let stack = [];
   let entry = ""; // string being typed, "" means no pending entry
   let angleMode = "deg"; // "deg" | "rad"
+  let history = []; // adding-machine tape: { label, value } or { marker: true, text }
+
+  const OP_SYMBOLS = { add: "+", sub: "−", mul: "×", div: "÷", pow: "yˣ" };
+  const UNARY_SYMBOLS = {
+    sin: "sin", cos: "cos", tan: "tan",
+    asin: "asin", acos: "acos", atan: "atan",
+    ln: "ln", log10: "log", sqrt: "√x", square: "x²",
+    inv: "1/x", exp: "eˣ",
+  };
+
+  function logEntry(label, value) {
+    history.push({ label: label || "", value: formatNumber(value) });
+  }
+
+  function logMarker(text) {
+    history.push({ marker: true, text });
+  }
 
   function hasPending() {
     return entry !== "";
@@ -19,8 +36,10 @@ const RPN = (() => {
 
   function pushPendingIfAny() {
     if (hasPending()) {
-      stack.push(pendingValue());
+      const val = pendingValue();
+      stack.push(val);
       entry = "";
+      logEntry("", val);
     }
   }
 
@@ -59,15 +78,16 @@ const RPN = (() => {
   function clearAll() {
     entry = "";
     stack = [];
+    logMarker("C");
   }
 
   function enter() {
     if (hasPending()) {
-      stack.push(pendingValue());
-      entry = "";
+      pushPendingIfAny();
     } else if (stack.length > 0) {
       // classic RPN behavior: bare Enter duplicates X register
       stack.push(stack[stack.length - 1]);
+      logEntry("", stack[stack.length - 1]);
     }
   }
 
@@ -100,6 +120,7 @@ const RPN = (() => {
       default: result = NaN;
     }
     stack.push(result);
+    logEntry(OP_SYMBOLS[op] || op, result);
   }
 
   function toRad(v) {
@@ -131,12 +152,13 @@ const RPN = (() => {
       default: result = x;
     }
     stack.push(result);
+    logEntry(UNARY_SYMBOLS[name] || name, result);
   }
 
   function pushConst(name) {
     pushPendingIfAny();
-    if (name === "pi") stack.push(Math.PI);
-    else if (name === "e") stack.push(Math.E);
+    if (name === "pi") { stack.push(Math.PI); logEntry("π", Math.PI); }
+    else if (name === "e") { stack.push(Math.E); logEntry("e", Math.E); }
   }
 
   // HP-12C/11C style percent: x becomes y*(x/100); y is left untouched so it
@@ -146,7 +168,9 @@ const RPN = (() => {
     if (stack.length < 2) return;
     const x = stack[stack.length - 1];
     const y = stack[stack.length - 2];
-    stack[stack.length - 1] = y * (x / 100);
+    const result = y * (x / 100);
+    stack[stack.length - 1] = result;
+    logEntry("%", result);
   }
 
   function setAngleMode(mode) {
@@ -159,6 +183,14 @@ const RPN = (() => {
 
   function getStack() {
     return stack.slice();
+  }
+
+  function getHistory() {
+    return history.slice();
+  }
+
+  function clearTape() {
+    history = [];
   }
 
   function getEntryDisplay() {
@@ -197,6 +229,8 @@ const RPN = (() => {
     getEntryDisplay,
     formatNumber,
     hasPending,
+    getHistory,
+    clearTape,
   };
 })();
 
@@ -210,6 +244,45 @@ if (typeof window !== "undefined") {
   const stackEl = document.getElementById("stack");
   const entryEl = document.getElementById("entry");
   const angleBtn = document.getElementById("angleMode");
+  const tapeEl = document.getElementById("tape");
+  const exportTapeBtn = document.getElementById("exportTape");
+  const clearTapeBtn = document.getElementById("clearTape");
+
+  function renderTape() {
+    const hist = RPN.getHistory();
+    tapeEl.innerHTML = "";
+    hist.forEach((entry) => {
+      const row = document.createElement("div");
+      if (entry.marker) {
+        row.className = "tape-marker";
+        row.textContent = entry.text;
+      } else {
+        row.className = "tape-row";
+        row.innerHTML = `<span class="tape-label">${entry.label}</span><span class="tape-value">${entry.value}</span>`;
+      }
+      tapeEl.appendChild(row);
+    });
+    tapeEl.scrollTop = tapeEl.scrollHeight;
+  }
+
+  function exportTape() {
+    const hist = RPN.getHistory();
+    const lines = hist.map((e) =>
+      e.marker ? `--- ${e.text} ---` : `${(e.label || "").padEnd(6)}${String(e.value).padStart(12)}`
+    );
+    const text = lines.join("\n") + "\n";
+    const blob = new Blob([text], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const ts = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    a.href = url;
+    a.download = `rpn-tape-${ts.getFullYear()}${pad(ts.getMonth() + 1)}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
 
   function render() {
     const stack = RPN.getStack();
@@ -227,6 +300,7 @@ if (typeof window !== "undefined") {
     });
     entryEl.textContent = RPN.getEntryDisplay();
     angleBtn.textContent = RPN.getAngleMode() === "deg" ? "DEG" : "RAD";
+    renderTape();
   }
 
   function handleAction(el) {
@@ -283,6 +357,13 @@ if (typeof window !== "undefined") {
   angleBtn.addEventListener("click", () => {
     RPN.setAngleMode(RPN.getAngleMode() === "deg" ? "rad" : "deg");
     render();
+  });
+
+  exportTapeBtn.addEventListener("click", exportTape);
+
+  clearTapeBtn.addEventListener("click", () => {
+    RPN.clearTape();
+    renderTape();
   });
 
   // Keyboard support

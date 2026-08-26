@@ -144,6 +144,82 @@ body {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tape-panel {
+  background: var(--display-bg);
+  border-radius: 14px;
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tape-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tape-title {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.tape-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.tape-actions .pill {
+  padding: 4px 10px;
+  font-size: 10px;
+}
+
+.tape {
+  background: #fdf8ec;
+  color: #2a2a2a;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  border-radius: 6px;
+  padding: 10px 12px;
+  max-height: 130px;
+  overflow-y: auto;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 23px,
+    rgba(0, 0, 0, 0.06) 23px,
+    rgba(0, 0, 0, 0.06) 24px
+  );
+}
+
+.tape-row {
+  display: flex;
+  justify-content: space-between;
+  white-space: pre;
+}
+
+.tape-row .tape-label {
+  color: #8a6d3b;
+  font-weight: 700;
+  min-width: 32px;
+}
+
+.tape-row .tape-value {
+  font-weight: 600;
+}
+
+.tape-marker {
+  text-align: center;
+  color: #b23b3b;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  margin: 2px 0;
 }
 
 .key {
