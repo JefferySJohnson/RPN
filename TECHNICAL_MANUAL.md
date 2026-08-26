@@ -72,12 +72,32 @@ Y/Z/T map to the next items down the stack. The UI's `render()` function in the 
 
 `toRad()` / `fromRad()` convert based on `angleMode` before/after calling `Math.sin/cos/tan/asin/acos/atan`. Only affects trig functions; everything else is unit-agnostic.
 
+### Unit conversions
+
+`CONVERSIONS` is a plain object keyed by category (`length`, `weight`, `volume`), each holding an array of conversion pairs: `{ id, fwdLabel, revLabel, factor }`. `factor` always converts the forward direction (unit1 → unit2) by multiplication; the reverse direction divides by the same factor, so each pair only needs one number:
+
+```js
+length: [
+  { id: "in_cm", fwdLabel: "in→cm", revLabel: "cm→in", factor: 2.54 },
+  { id: "ft_m", fwdLabel: "ft→m", revLabel: "m→ft", factor: 0.3048 },
+  { id: "mi_km", fwdLabel: "mi→km", revLabel: "km→mi", factor: 1.609344 },
+],
+```
+
+`convert(category, id, direction)` follows the exact same shape as `unaryFn()`: auto-push any pending entry via `pushPendingIfAny()`, pop one value, transform it, push the result, log it to the tape. The only difference is which lookup table supplies the transform and label. `direction` is `"fwd"` (multiply by `factor`) or `"rev"` (divide by `factor`); an unrecognized category or id is a safe no-op rather than a crash — it simply returns without touching the stack.
+
+Two read-only accessors expose the table to the UI without letting it reach into `CONVERSIONS` directly:
+- `getConversionCategories()` → `[{ id, label }]` for the category pills (`CATEGORY_LABELS` supplies the display name)
+- `getConversions(category)` → `[{ id, fwdLabel, revLabel }]` for that category's button grid (factor is intentionally omitted — the UI only ever needs the id and labels to build buttons and dispatch clicks)
+
+Adding a new conversion pair or an entirely new category is a data-only change: extend `CONVERSIONS` (and `CATEGORY_LABELS` for a new category) and the UI picks it up automatically, since `renderConvertCategories()`/`renderConvertGrid()` build their buttons from `getConversionCategories()`/`getConversions()` rather than any hardcoded list.
+
 ### Tape / history
 
 `history` is an array of `{ label, value }` entries (numbers pushed, operation results) or `{ marker: true, text }` entries (currently just the `"C"` marker `clearAll()` writes). Two things log to it:
 
-- **`pushPendingIfAny()`** — the shared helper called by `binaryOp`, `unaryFn`, `pushConst`, `percent`, `drop`, and `swap` before they touch the stack — logs the pushed value with an empty label whenever it actually pushes something. This is what makes the tape show a number even when the user never explicitly pressed Enter (e.g., typing `4` then `+` directly).
-- Each operation function (`binaryOp`, `unaryFn`, `pushConst`, `percent`) additionally calls `logEntry()` itself once it has a result, using a small lookup (`OP_SYMBOLS`, `UNARY_SYMBOLS`) to turn the internal op/function name into the same symbol shown on its button (e.g. `sub` → `−`, `sqrt` → `√x`).
+- **`pushPendingIfAny()`** — the shared helper called by `binaryOp`, `unaryFn`, `pushConst`, `percent`, `convert`, `drop`, and `swap` before they touch the stack — logs the pushed value with an empty label whenever it actually pushes something. This is what makes the tape show a number even when the user never explicitly pressed Enter (e.g., typing `4` then `+` directly).
+- Each operation function (`binaryOp`, `unaryFn`, `pushConst`, `percent`, `convert`) additionally calls `logEntry()` itself once it has a result, using a small lookup (`OP_SYMBOLS`, `UNARY_SYMBOLS`, or the matched conversion pair's `fwdLabel`/`revLabel`) to turn the internal op/function/conversion name into the same symbol shown on its button (e.g. `sub` → `−`, `sqrt` → `√x`, `in_cm`/`fwd` → `in→cm`).
 
 `clearAll()` calls `logMarker("C")` but does **not** clear `history` — the tape is meant to behave like a physical adding-machine tape that keeps printing across register clears. Clearing the visible tape is a separate, explicit action: `clearTape()` empties `history` outright and is only ever called from the UI's "Clear tape" button, never internally.
 
@@ -94,6 +114,12 @@ Y/Z/T map to the next items down the stack. The UI's `render()` function in the 
 `renderTape()` rebuilds the `#tape` element from `RPN.getHistory()` on every render: each `{ label, value }` entry becomes a `.tape-row` (label left, value right), each `{ marker }` entry becomes a centered `.tape-marker` line, and the panel auto-scrolls to the bottom afterward.
 
 `exportTape()` (wired to the "Export .txt" button) formats the same history array as plain text — `${label.padEnd(6)}${value.padStart(12)}` per line, `--- text ---` for markers — joins it into one string, and triggers a download via a `Blob` + temporary `<a download>` element (no server round-trip). The filename is timestamped (`rpn-tape-YYYYMMDD-HHMMSS.txt`) so repeated exports don't overwrite each other. The "Clear tape" button just calls `RPN.clearTape()` followed by `renderTape()`.
+
+### Tape/Convert tab switcher
+
+The tape panel and the conversion grid occupy the same footprint in the layout rather than each getting their own space, so switching tabs doesn't resize the window. `switchTab(tab)` toggles a `.hidden` class (`display: none`) on three elements: `#tape`, `#tapeActions` (the Export/Clear buttons), and `#convertPanel`, showing exactly one pairing at a time — `#tape` + `#tapeActions` for the Tape tab, `#convertPanel` alone for Convert — while also updating which `.tab-btn` carries the `.active` class.
+
+`renderConvertCategories()` and `renderConvertGrid()` build their buttons from `RPN.getConversionCategories()` / `RPN.getConversions(activeCategory)` rather than any hardcoded markup, so they only need to run once at startup and again whenever `activeCategory` changes (a category pill is clicked) — unlike `renderTape()`, they're not part of the main `render()` loop, since the conversion grid's *contents* never depend on calculator state, only on which category is selected. Clicking a conversion button calls `RPN.convert(category, id, direction)` (reading the three values off the button's `data-*` attributes) and then the normal `render()`, so the result shows up in both the entry line and, once you flip back to the Tape tab, the log.
 
 ### Key grid order
 
@@ -163,3 +189,5 @@ A test pass covering basic arithmetic, non-commutative operand order, trig with 
 - **Memory registers (M+, MR, MC):** would need a new `memory` variable in the `RPN` module plus three new methods, following the same pattern as the existing stack operations.
 - **Undo:** the tape (`history`) is an append-only log for display/export, not a snapshot stack, so it can't drive undo as-is. True undo would need a separate stack of `stack`/`entry` snapshots taken before each mutating call.
 - **CSV/XLSX export:** `exportTape()` already isolates all the formatting logic in one function — swapping the plain-text `join("\n")` for comma-separated rows (or a library like SheetJS for a real `.xlsx`) wouldn't touch the logging side at all.
+- **More conversion categories/units:** purely a data change — add entries to `CONVERSIONS` (and `CATEGORY_LABELS` for a new category). No UI code changes needed; `renderConvertCategories()`/`renderConvertGrid()` read the table directly.
+- **Currency conversion:** the one conversion category that can't be a static factor, since rates change daily. Would need a `fetch()` to a free rate API (e.g. Frankfurter.app, no key required), cached in memory with a timestamp so it isn't re-fetched on every button click, and a fallback for when the app is offline (the rest of the calculator works with no network at all, so this would be the first feature that doesn't).

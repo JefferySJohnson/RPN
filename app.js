@@ -18,6 +18,26 @@ const RPN = (() => {
     inv: "1/x", exp: "eˣ",
   };
 
+  // Basic US/imperial <-> metric conversions. `factor` converts the forward
+  // direction (unit1 -> unit2) by multiplication; reverse divides by it.
+  const CATEGORY_LABELS = { length: "Length", weight: "Weight", volume: "Volume" };
+  const CONVERSIONS = {
+    length: [
+      { id: "in_cm", fwdLabel: "in→cm", revLabel: "cm→in", factor: 2.54 },
+      { id: "ft_m", fwdLabel: "ft→m", revLabel: "m→ft", factor: 0.3048 },
+      { id: "mi_km", fwdLabel: "mi→km", revLabel: "km→mi", factor: 1.609344 },
+    ],
+    weight: [
+      { id: "lb_kg", fwdLabel: "lb→kg", revLabel: "kg→lb", factor: 0.45359237 },
+      { id: "oz_g", fwdLabel: "oz→g", revLabel: "g→oz", factor: 28.3495231 },
+    ],
+    volume: [
+      { id: "gal_l", fwdLabel: "gal→L", revLabel: "L→gal", factor: 3.785411784 },
+      { id: "qt_l", fwdLabel: "qt→L", revLabel: "L→qt", factor: 0.946352946 },
+      { id: "floz_ml", fwdLabel: "fl oz→mL", revLabel: "mL→fl oz", factor: 29.5735295625 },
+    ],
+  };
+
   function logEntry(label, value) {
     history.push({ label: label || "", value: formatNumber(value) });
   }
@@ -173,6 +193,26 @@ const RPN = (() => {
     logEntry("%", result);
   }
 
+  function getConversionCategories() {
+    return Object.keys(CONVERSIONS).map((id) => ({ id, label: CATEGORY_LABELS[id] || id }));
+  }
+
+  function getConversions(category) {
+    return (CONVERSIONS[category] || []).map(({ id, fwdLabel, revLabel }) => ({ id, fwdLabel, revLabel }));
+  }
+
+  // direction: "fwd" (unit1 -> unit2, multiply) or "rev" (unit2 -> unit1, divide)
+  function convert(category, id, direction) {
+    pushPendingIfAny();
+    if (stack.length < 1) return;
+    const pair = (CONVERSIONS[category] || []).find((p) => p.id === id);
+    if (!pair) return;
+    const x = stack.pop();
+    const result = direction === "rev" ? x / pair.factor : x * pair.factor;
+    stack.push(result);
+    logEntry(direction === "rev" ? pair.revLabel : pair.fwdLabel, result);
+  }
+
   function setAngleMode(mode) {
     angleMode = mode;
   }
@@ -223,6 +263,9 @@ const RPN = (() => {
     unaryFn,
     pushConst,
     percent,
+    getConversionCategories,
+    getConversions,
+    convert,
     setAngleMode,
     getAngleMode,
     getStack,
@@ -247,6 +290,65 @@ if (typeof window !== "undefined") {
   const tapeEl = document.getElementById("tape");
   const exportTapeBtn = document.getElementById("exportTape");
   const clearTapeBtn = document.getElementById("clearTape");
+  const tapeActionsEl = document.getElementById("tapeActions");
+  const panelTabsEl = document.getElementById("panelTabs");
+  const convertPanelEl = document.getElementById("convertPanel");
+  const convertCategoriesEl = document.getElementById("convertCategories");
+  const convertGridEl = document.getElementById("convertGrid");
+
+  let activeCategory = RPN.getConversionCategories()[0]?.id || "length";
+
+  function renderConvertCategories() {
+    const cats = RPN.getConversionCategories();
+    convertCategoriesEl.innerHTML = "";
+    cats.forEach((cat) => {
+      const btn = document.createElement("button");
+      btn.className = "pill cat-btn" + (cat.id === activeCategory ? " active" : "");
+      btn.type = "button";
+      btn.textContent = cat.label;
+      btn.dataset.cat = cat.id;
+      convertCategoriesEl.appendChild(btn);
+    });
+  }
+
+  function renderConvertGrid() {
+    const pairs = RPN.getConversions(activeCategory);
+    convertGridEl.innerHTML = "";
+    pairs.forEach((p) => {
+      const fwdBtn = document.createElement("button");
+      fwdBtn.className = "convert-btn";
+      fwdBtn.type = "button";
+      fwdBtn.textContent = p.fwdLabel;
+      fwdBtn.dataset.cat = activeCategory;
+      fwdBtn.dataset.id = p.id;
+      fwdBtn.dataset.dir = "fwd";
+      convertGridEl.appendChild(fwdBtn);
+
+      const revBtn = document.createElement("button");
+      revBtn.className = "convert-btn";
+      revBtn.type = "button";
+      revBtn.textContent = p.revLabel;
+      revBtn.dataset.cat = activeCategory;
+      revBtn.dataset.id = p.id;
+      revBtn.dataset.dir = "rev";
+      convertGridEl.appendChild(revBtn);
+    });
+  }
+
+  function switchTab(tab) {
+    panelTabsEl.querySelectorAll(".tab-btn").forEach((b) => {
+      b.classList.toggle("active", b.dataset.tab === tab);
+    });
+    if (tab === "convert") {
+      tapeEl.classList.add("hidden");
+      tapeActionsEl.classList.add("hidden");
+      convertPanelEl.classList.remove("hidden");
+    } else {
+      tapeEl.classList.remove("hidden");
+      tapeActionsEl.classList.remove("hidden");
+      convertPanelEl.classList.add("hidden");
+    }
+  }
 
   function renderTape() {
     const hist = RPN.getHistory();
@@ -365,6 +467,29 @@ if (typeof window !== "undefined") {
     RPN.clearTape();
     renderTape();
   });
+
+  panelTabsEl.addEventListener("click", (e) => {
+    const btn = e.target.closest(".tab-btn");
+    if (btn) switchTab(btn.dataset.tab);
+  });
+
+  convertCategoriesEl.addEventListener("click", (e) => {
+    const btn = e.target.closest(".cat-btn");
+    if (!btn) return;
+    activeCategory = btn.dataset.cat;
+    renderConvertCategories();
+    renderConvertGrid();
+  });
+
+  convertGridEl.addEventListener("click", (e) => {
+    const btn = e.target.closest(".convert-btn");
+    if (!btn) return;
+    RPN.convert(btn.dataset.cat, btn.dataset.id, btn.dataset.dir);
+    render();
+  });
+
+  renderConvertCategories();
+  renderConvertGrid();
 
   // Keyboard support
   window.addEventListener("keydown", (e) => {

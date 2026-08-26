@@ -79,13 +79,22 @@
 
   <div class="tape-panel">
     <div class="tape-header">
-      <span class="tape-title">Tape</span>
-      <div class="tape-actions">
+      <div class="tabs" id="panelTabs">
+        <button class="pill tab-btn active" data-tab="tape" type="button">Tape</button>
+        <button class="pill tab-btn" data-tab="convert" type="button">Convert</button>
+      </div>
+      <div class="tape-actions" id="tapeActions">
         <button id="exportTape" class="pill" type="button">Export .txt</button>
         <button id="clearTape" class="pill" type="button">Clear tape</button>
       </div>
     </div>
+
     <div class="tape" id="tape"></div>
+
+    <div class="convert-panel hidden" id="convertPanel">
+      <div class="convert-categories" id="convertCategories"></div>
+      <div class="convert-grid" id="convertGrid"></div>
+    </div>
   </div>
 </div>
 
