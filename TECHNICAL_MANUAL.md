@@ -109,6 +109,10 @@ Adding a new conversion pair or an entirely new category is a data-only change: 
 - Keyboard input is handled by a `keydown` listener mapping standard keys (digits, `.`, Enter/Space, Backspace, Esc, Delete, `+ - * / ^ %`) to the same `RPN` calls.
 - `render()` is the only function that touches the DOM for calculator state — it's called after every action, keeping state and view in sync without a framework. It also calls `renderTape()` at the end of every render pass.
 
+### Viewport height and scrolling
+
+`html, body` use `min-height: 100%` (not `height: 100%`). This matters more than it looks: `body` also centers its content with `display: flex; align-items: center`. If `html`/`body` were pinned to an explicit `height: 100%` and the calculator's content (keypad + expanded tray) was taller than the viewport — easy to hit on a phone, especially with the tray open — the page had no room to grow, so the overflow was clipped symmetrically off both the top and bottom with no way to scroll to it, since as far as the browser was concerned the page *was* exactly 100% tall already. Switching to `min-height` lets `body` grow past the viewport when its content needs more room, which restores normal page scrolling as a fallback — centering still applies when content fits, and simply has no visible effect (there's no extra space to center within) once content is taller than the screen. `body`'s own `min-height` is declared twice, `100vh` then `100dvh`; browsers that don't understand `dvh` just keep the `vh` value, and ones that do get the more accurate dynamic-viewport figure.
+
 ### Tape rendering and export
 
 `renderTape()` rebuilds the `#tape` element from `RPN.getHistory()` on every render: each `{ label, value }` entry becomes a `.tape-row` (label left, value right), each `{ marker }` entry becomes a centered `.tape-marker` line, and the panel auto-scrolls to the bottom afterward.
@@ -120,6 +124,12 @@ Adding a new conversion pair or an entirely new category is a data-only change: 
 The tape panel and the conversion grid occupy the same footprint in the layout rather than each getting their own space, so switching tabs doesn't resize the window. `switchTab(tab)` toggles a `.hidden` class (`display: none`) on three elements: `#tape`, `#tapeActions` (the Export/Clear buttons), and `#convertPanel`, showing exactly one pairing at a time — `#tape` + `#tapeActions` for the Tape tab, `#convertPanel` alone for Convert — while also updating which `.tab-btn` carries the `.active` class.
 
 `renderConvertCategories()` and `renderConvertGrid()` build their buttons from `RPN.getConversionCategories()` / `RPN.getConversions(activeCategory)` rather than any hardcoded markup, so they only need to run once at startup and again whenever `activeCategory` changes (a category pill is clicked) — unlike `renderTape()`, they're not part of the main `render()` loop, since the conversion grid's *contents* never depend on calculator state, only on which category is selected. Clicking a conversion button calls `RPN.convert(category, id, direction)` (reading the three values off the button's `data-*` attributes) and then the normal `render()`, so the result shows up in both the entry line and, once you flip back to the Tape tab, the log.
+
+### Collapsible tray
+
+`index.html` wraps `#tape` and `#convertPanel` together in a single `#trayBody` element, separate from the tab/action buttons in `.tape-header`. `setTrayCollapsed(collapsed)` toggles a `.collapsed` class on `#tapePanel` (`.tape-panel.collapsed .tray-body { display: none; }` in `styles.css`), swaps the toggle button's glyph between `▾`/`▸`, and persists the choice to `localStorage` under `rpn-tray-collapsed`. Wrapping tape and convert together, rather than collapsing each tab separately, means the fold state is independent of which tab is selected — you can collapse the tray while on either tab and it stays collapsed when you switch.
+
+`initTray()` runs once at startup: if `localStorage` has a saved value, it wins; otherwise the starting state is decided by `window.matchMedia("(max-height: 950px)").matches` — short viewports (roughly phone-in-portrait or tablet-in-landscape territory) start collapsed, taller ones start expanded. `localStorage` access is wrapped in `try/catch` in both directions since it can throw in private-browsing contexts; a failure there just means the preference doesn't persist, not a crash.
 
 ### Key grid order
 

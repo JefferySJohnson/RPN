@@ -295,6 +295,41 @@ if (typeof window !== "undefined") {
   const convertPanelEl = document.getElementById("convertPanel");
   const convertCategoriesEl = document.getElementById("convertCategories");
   const convertGridEl = document.getElementById("convertGrid");
+  const tapePanelEl = document.getElementById("tapePanel");
+  const trayToggleBtn = document.getElementById("trayToggle");
+
+  const TRAY_STORAGE_KEY = "rpn-tray-collapsed";
+  // Short viewports (phones in portrait, tablets in landscape) start with
+  // the tray collapsed to leave room for the full keypad; tall viewports
+  // (desktop, most tablets in portrait) start expanded.
+  const SHORT_VIEWPORT_QUERY = "(max-height: 950px)";
+
+  function setTrayCollapsed(collapsed) {
+    tapePanelEl.classList.toggle("collapsed", collapsed);
+    trayToggleBtn.textContent = collapsed ? "▸" : "▾";
+    trayToggleBtn.setAttribute("aria-label", collapsed ? "Expand tray" : "Collapse tray");
+    try {
+      localStorage.setItem(TRAY_STORAGE_KEY, collapsed ? "1" : "0");
+    } catch (err) {
+      // localStorage unavailable (private browsing, etc.) - fine, just won't persist
+    }
+  }
+
+  function initTray() {
+    let collapsed;
+    let saved = null;
+    try {
+      saved = localStorage.getItem(TRAY_STORAGE_KEY);
+    } catch (err) {
+      saved = null;
+    }
+    if (saved !== null) {
+      collapsed = saved === "1";
+    } else {
+      collapsed = window.matchMedia(SHORT_VIEWPORT_QUERY).matches;
+    }
+    setTrayCollapsed(collapsed);
+  }
 
   let activeCategory = RPN.getConversionCategories()[0]?.id || "length";
 
@@ -488,8 +523,13 @@ if (typeof window !== "undefined") {
     render();
   });
 
+  trayToggleBtn.addEventListener("click", () => {
+    setTrayCollapsed(!tapePanelEl.classList.contains("collapsed"));
+  });
+
   renderConvertCategories();
   renderConvertGrid();
+  initTray();
 
   // Keyboard support
   window.addEventListener("keydown", (e) => {

@@ -106,6 +106,12 @@ Dividing by zero or taking the log/root of an invalid value shows **Error** on t
 
 Below the keypad is a panel with two tabs, **Tape** and **Convert**, sharing the same space so the app stays the same compact size no matter which one you're using.
 
+### Collapsing the tray
+
+The whole panel — tabs, tape, and convert grid — can fold up into a slim bar using the **▾** button on the right of the panel header. Tap it again (it becomes **▸** when collapsed) to fold it back down. This is mainly useful on phones, where the full keypad plus panel can be taller than the screen: folding the tray away leaves the entire keypad reachable without scrolling.
+
+The app remembers whichever state you leave it in, so it won't reset every time you reopen it. The very first time you open it, it picks a starting state automatically based on how much vertical room the screen has — short screens (phones in portrait, tablets in landscape) start folded up; tall screens (a laptop, most tablets in portrait) start open.
+
 ### Tape
 
 The Tape tab shows a running printout, styled like a paper adding-machine tape, of everything that's happened: every number pushed onto the stack and every operation's result, with the operator or function name on the left. Pressing **AC** doesn't erase the tape — it prints a `--- C ---` marker and keeps going, the same way clearing a physical adding machine doesn't tear off the paper.
