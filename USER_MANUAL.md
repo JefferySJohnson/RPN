@@ -83,8 +83,8 @@ A **Theme** button sits next to the DEG/RAD pill in the header. Tap it to cycle 
 | Theme | Look |
 |---|---|
 | Classic | The original dark blue-and-orange look (default) |
-| Light | A bright, light background for daytime use |
-| Crimson | Crimson and white — University of Alabama colors |
+| Blue | A deep navy background with white keys |
+| Crimson | Crimson and maroon background — University of Alabama colors — with white keys |
 | Amber | A warm, retro amber-on-black look reminiscent of old LED/LCD calculators |
 
 Whichever theme you land on is remembered the next time you open the app. The paper tape itself always stays cream-colored with dark ink, no matter which theme is active — real adding-machine tape doesn't change color with the machine, so this one stays put on purpose.

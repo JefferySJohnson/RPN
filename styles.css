@@ -8,7 +8,9 @@
   --on-accent: #0d0d16;
   --accent-2: #ff9f6c;
   --on-accent-2: #1a1206;
+  --entry-accent: #ff9f6c;
   --text: #eef0ff;
+  --key-text: #eef0ff;
   --text-dim: #8b8ba3;
   --key-bg: #24243a;
   --key-bg-hover: #2d2d47;
@@ -19,48 +21,53 @@
   --danger: #ff6c6c;
 }
 
-/* Light */
+/* Blue - deep navy as the dominant background, white keys as the accent */
 [data-theme="light"] {
-  color-scheme: light;
-  --bg: #eef1f7;
-  --bg-glow: #ffffff;
-  --panel: #ffffff;
-  --display-bg: #e4e7f0;
-  --accent: #3355dd;
+  color-scheme: dark;
+  --bg: #12294f;
+  --bg-glow: #1d3f7a;
+  --panel: #1a3766;
+  --display-bg: #081a33;
+  --accent: #3f7fe0;
   --on-accent: #ffffff;
-  --accent-2: #d1550c;
+  --accent-2: #0d2144;
   --on-accent-2: #ffffff;
-  --text: #20223a;
-  --text-dim: #6b6f8a;
-  --key-bg: #eef0f7;
-  --key-bg-hover: #dfe3f0;
-  --num-bg: #f5f6fb;
-  --sci-bg: #e3e7f5;
-  --sci-text: #2c3468;
-  --fn-bg: #eceef6;
-  --danger: #c81e4a;
+  --entry-accent: #7fb2ff;
+  --text: #e7eefc;
+  --key-text: #16305c;
+  --text-dim: #9db3d8;
+  --key-bg: #ffffff;
+  --key-bg-hover: #dbe6f7;
+  --num-bg: #ffffff;
+  --sci-bg: #1f3f72;
+  --sci-text: #d7e4fa;
+  --fn-bg: #1f3f72;
+  --danger: #ff5470;
 }
 
-/* Crimson & White (University of Alabama colors) */
-[data-theme="crimson"] {
-  color-scheme: light;
-  --bg: #f7f1e6;
-  --bg-glow: #ffffff;
-  --panel: #ffffff;
-  --display-bg: #fbf3ec;
-  --accent: #9e1b32;
+/* Crimson Dark - inverted: crimson/maroon as the dominant background,
+   white as the accent (rather than white bg with crimson accents) */
+[data-theme="crimson-dark"] {
+  color-scheme: dark;
+  --bg: #4a0b17;
+  --bg-glow: #7a1128;
+  --panel: #6b1220;
+  --display-bg: #26060d;
+  --accent: #d1294a;
   --on-accent: #ffffff;
-  --accent-2: #641220;
+  --accent-2: #2f0910;
   --on-accent-2: #ffffff;
-  --text: #3a0812;
-  --text-dim: #8c5b64;
+  --entry-accent: #ff7a90;
+  --text: #f7e2e6;
+  --key-text: #6b1220;
+  --text-dim: #cf94a0;
   --key-bg: #ffffff;
-  --key-bg-hover: #f3e2e4;
+  --key-bg-hover: #f0d6db;
   --num-bg: #ffffff;
-  --sci-bg: #f6e4e6;
-  --sci-text: #6b101f;
-  --fn-bg: #f1e8e0;
-  --danger: #7a0019;
+  --sci-bg: #52101c;
+  --sci-text: #f2d3d9;
+  --fn-bg: #52101c;
+  --danger: #ffffff;
 }
 
 /* Amber - warm retro LED/LCD look */
@@ -74,7 +81,9 @@
   --on-accent: #1a0f00;
   --accent-2: #ffb020;
   --on-accent-2: #1a0f00;
+  --entry-accent: #ffb020;
   --text: #f0c98a;
+  --key-text: #f0c98a;
   --text-dim: #a9885f;
   --key-bg: #2e2013;
   --key-bg-hover: #3a2a19;
@@ -140,7 +149,7 @@ body {
 
 .pill {
   background: var(--key-bg);
-  color: var(--text);
+  color: var(--key-text);
   border: none;
   border-radius: 999px;
   padding: 6px 12px;
@@ -206,7 +215,7 @@ body {
 }
 
 .entry-label {
-  color: var(--accent-2);
+  color: var(--entry-accent);
   font-weight: 600;
   font-size: 16px;
 }
@@ -381,7 +390,7 @@ body {
   padding: 16px 0;
   font-size: 17px;
   font-weight: 600;
-  color: var(--text);
+  color: var(--key-text);
   background: var(--key-bg);
   cursor: pointer;
   transition: background 0.1s ease, transform 0.05s ease;

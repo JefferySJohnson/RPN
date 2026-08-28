@@ -302,8 +302,8 @@ if (typeof window !== "undefined") {
   const THEME_STORAGE_KEY = "rpn-theme";
   const THEMES = [
     { id: "classic", label: "Classic" },
-    { id: "light", label: "Light" },
-    { id: "crimson", label: "Crimson" },
+    { id: "light", label: "Blue" },
+    { id: "crimson-dark", label: "Crimson" },
     { id: "amber", label: "Amber" },
   ];
 
