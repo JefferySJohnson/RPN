@@ -131,6 +131,18 @@ The tape panel and the conversion grid occupy the same footprint in the layout r
 
 `initTray()` runs once at startup: if `localStorage` has a saved value, it wins; otherwise the starting state is decided by `window.matchMedia("(max-height: 950px)").matches` — short viewports (roughly phone-in-portrait or tablet-in-landscape territory) start collapsed, taller ones start expanded. `localStorage` access is wrapped in `try/catch` in both directions since it can throw in private-browsing contexts; a failure there just means the preference doesn't persist, not a crash.
 
+### Theming
+
+All colors are CSS custom properties declared on `:root` in `styles.css` — `--bg`, `--bg-glow` (the radial-gradient highlight behind the header), `--panel`, `--display-bg`, `--accent`/`--on-accent`, `--accent-2`/`--on-accent-2`, `--text`, `--text-dim`, `--key-bg`/`--key-bg-hover`, `--num-bg`, `--sci-bg`/`--sci-text`, `--fn-bg`, and `--danger`. Every color-related rule in the file reads one of these variables instead of a literal hex value, so a "theme" is just a block that redeclares the same variable names with different values — no other CSS had to change to support theming.
+
+Three theme blocks — `[data-theme="light"]`, `[data-theme="crimson"]`, `[data-theme="amber"]` — sit right after `:root` and override the variables whenever that attribute is present on `<html>`. The default ("Classic") theme is simply the bare `:root` values with no `data-theme` attribute at all, so existing saved state with nothing set still renders exactly as before the feature was added.
+
+`app.js` defines a `THEMES` array of `{ id, label }` pairs and a `setTheme(id)` function that sets or removes `document.documentElement.dataset.theme`, updates the toggle button's label, and persists the choice to `localStorage` under `rpn-theme` — the same pattern (including the `try/catch` around `localStorage`) used for the tray's collapsed state. `initTheme()` runs once at startup and applies the saved theme, defaulting to `"classic"` if nothing is stored. Clicking the **Theme** button (`#themeToggle`, next to the DEG/RAD pill) advances to the next entry in `THEMES`, wrapping from Amber back to Classic.
+
+One deliberate exception: `.tape`'s paper background and ink colors are hardcoded rather than wired to theme variables, so the paper tape always looks the same regardless of the active theme — matching how real adding-machine paper doesn't change color with the machine's case.
+
+**Adding a new theme** is a data-only change: add another `[data-theme="..."]` block redeclaring the full variable set with new values, then add its `{ id, label }` to the `THEMES` array in `app.js`. No other wiring is needed — the toggle button and persistence logic already iterate over that array.
+
 ### Key grid order
 
 The `.keys` grid in `index.html` is a 4-column CSS grid with no explicit `grid-row`/`grid-column` placement (aside from `.key.enter`, which spans 2 columns) — button order in the markup is button order on screen. The layout mirrors an HP-41-style keypad:
@@ -201,3 +213,4 @@ A test pass covering basic arithmetic, non-commutative operand order, trig with 
 - **CSV/XLSX export:** `exportTape()` already isolates all the formatting logic in one function — swapping the plain-text `join("\n")` for comma-separated rows (or a library like SheetJS for a real `.xlsx`) wouldn't touch the logging side at all.
 - **More conversion categories/units:** purely a data change — add entries to `CONVERSIONS` (and `CATEGORY_LABELS` for a new category). No UI code changes needed; `renderConvertCategories()`/`renderConvertGrid()` read the table directly.
 - **Currency conversion:** the one conversion category that can't be a static factor, since rates change daily. Would need a `fetch()` to a free rate API (e.g. Frankfurter.app, no key required), cached in memory with a timestamp so it isn't re-fetched on every button click, and a fallback for when the app is offline (the rest of the calculator works with no network at all, so this would be the first feature that doesn't).
+- **More themes:** add another `[data-theme="..."]` block in `styles.css` redeclaring the full variable set with new values, then add its `{ id, label }` to the `THEMES` array in `app.js`. No other code changes needed — the toggle button and `localStorage` persistence already iterate over that array.

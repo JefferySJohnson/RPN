@@ -1,15 +1,88 @@
 :root {
   color-scheme: dark;
   --bg: #14141f;
+  --bg-glow: #1e1e30;
   --panel: #1c1c2b;
   --display-bg: #0d0d16;
   --accent: #6c8cff;
+  --on-accent: #0d0d16;
   --accent-2: #ff9f6c;
+  --on-accent-2: #1a1206;
   --text: #eef0ff;
   --text-dim: #8b8ba3;
   --key-bg: #24243a;
   --key-bg-hover: #2d2d47;
+  --num-bg: #2a2a3d;
+  --sci-bg: #22223a;
+  --sci-text: #cfd3ff;
+  --fn-bg: #262636;
   --danger: #ff6c6c;
+}
+
+/* Light */
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #eef1f7;
+  --bg-glow: #ffffff;
+  --panel: #ffffff;
+  --display-bg: #e4e7f0;
+  --accent: #3355dd;
+  --on-accent: #ffffff;
+  --accent-2: #d1550c;
+  --on-accent-2: #ffffff;
+  --text: #20223a;
+  --text-dim: #6b6f8a;
+  --key-bg: #eef0f7;
+  --key-bg-hover: #dfe3f0;
+  --num-bg: #f5f6fb;
+  --sci-bg: #e3e7f5;
+  --sci-text: #2c3468;
+  --fn-bg: #eceef6;
+  --danger: #c81e4a;
+}
+
+/* Crimson & White (University of Alabama colors) */
+[data-theme="crimson"] {
+  color-scheme: light;
+  --bg: #f7f1e6;
+  --bg-glow: #ffffff;
+  --panel: #ffffff;
+  --display-bg: #fbf3ec;
+  --accent: #9e1b32;
+  --on-accent: #ffffff;
+  --accent-2: #641220;
+  --on-accent-2: #ffffff;
+  --text: #3a0812;
+  --text-dim: #8c5b64;
+  --key-bg: #ffffff;
+  --key-bg-hover: #f3e2e4;
+  --num-bg: #ffffff;
+  --sci-bg: #f6e4e6;
+  --sci-text: #6b101f;
+  --fn-bg: #f1e8e0;
+  --danger: #7a0019;
+}
+
+/* Amber - warm retro LED/LCD look */
+[data-theme="amber"] {
+  color-scheme: dark;
+  --bg: #1c130b;
+  --bg-glow: #2c1d10;
+  --panel: #241a10;
+  --display-bg: #130d07;
+  --accent: #ff8c1a;
+  --on-accent: #1a0f00;
+  --accent-2: #ffb020;
+  --on-accent-2: #1a0f00;
+  --text: #f0c98a;
+  --text-dim: #a9885f;
+  --key-bg: #2e2013;
+  --key-bg-hover: #3a2a19;
+  --num-bg: #33240f;
+  --sci-bg: #2a1d10;
+  --sci-text: #f0c98a;
+  --fn-bg: #241a10;
+  --danger: #ff5a3c;
 }
 
 * {
@@ -23,7 +96,7 @@ html, body {
 }
 
 body {
-  background: radial-gradient(circle at 50% 0%, #1e1e30, var(--bg) 60%);
+  background: radial-gradient(circle at 50% 0%, var(--bg-glow), var(--bg) 60%);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   display: flex;
@@ -78,7 +151,7 @@ body {
 
 .pill.hidden,
 .hidden {
-  display: none;
+  display: none !important;
 }
 
 .pill:active {
@@ -87,7 +160,7 @@ body {
 
 .pill.active {
   background: var(--accent);
-  color: #0d0d16;
+  color: var(--on-accent);
 }
 
 .display {
@@ -288,8 +361,8 @@ body {
 }
 
 .convert-btn {
-  background: #22223a;
-  color: #cfd3ff;
+  background: var(--sci-bg);
+  color: var(--sci-text);
   border: none;
   border-radius: 8px;
   padding: 9px 4px;
@@ -299,7 +372,7 @@ body {
 }
 
 .convert-btn:active {
-  background: #2d2d47;
+  background: var(--key-bg-hover);
 }
 
 .key {
@@ -320,22 +393,22 @@ body {
 }
 
 .key.num {
-  background: #2a2a3d;
+  background: var(--num-bg);
 }
 
 .key.op {
   background: var(--accent);
-  color: #0d0d16;
+  color: var(--on-accent);
 }
 
 .key.sci {
-  background: #22223a;
+  background: var(--sci-bg);
   font-size: 15px;
-  color: #cfd3ff;
+  color: var(--sci-text);
 }
 
 .key.fn {
-  background: #262636;
+  background: var(--fn-bg);
   font-size: 14px;
   color: var(--text-dim);
 }
@@ -347,7 +420,7 @@ body {
 .key.enter {
   grid-column: span 2;
   background: var(--accent-2);
-  color: #1a1206;
+  color: var(--on-accent-2);
 }
 
 .key.back {

@@ -76,6 +76,19 @@ These apply to whatever is currently on the entry line (you don't need to press 
 
 The **DEG / RAD** pill in the top-right toggles between degrees and radians for `sin`, `cos`, and `tan`. It's shown at all times so you always know which mode you're in.
 
+## Themes
+
+A **Theme** button sits next to the DEG/RAD pill in the header. Tap it to cycle through four color themes:
+
+| Theme | Look |
+|---|---|
+| Classic | The original dark blue-and-orange look (default) |
+| Light | A bright, light background for daytime use |
+| Crimson | Crimson and white — University of Alabama colors |
+| Amber | A warm, retro amber-on-black look reminiscent of old LED/LCD calculators |
+
+Whichever theme you land on is remembered the next time you open the app. The paper tape itself always stays cream-colored with dark ink, no matter which theme is active — real adding-machine tape doesn't change color with the machine, so this one stays put on purpose.
+
 ## Stack management
 
 | Key | What it does |

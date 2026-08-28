@@ -297,6 +297,40 @@ if (typeof window !== "undefined") {
   const convertGridEl = document.getElementById("convertGrid");
   const tapePanelEl = document.getElementById("tapePanel");
   const trayToggleBtn = document.getElementById("trayToggle");
+  const themeToggleBtn = document.getElementById("themeToggle");
+
+  const THEME_STORAGE_KEY = "rpn-theme";
+  const THEMES = [
+    { id: "classic", label: "Classic" },
+    { id: "light", label: "Light" },
+    { id: "crimson", label: "Crimson" },
+    { id: "amber", label: "Amber" },
+  ];
+
+  function setTheme(id) {
+    const theme = THEMES.find((t) => t.id === id) || THEMES[0];
+    if (theme.id === "classic") {
+      document.documentElement.removeAttribute("data-theme");
+    } else {
+      document.documentElement.setAttribute("data-theme", theme.id);
+    }
+    themeToggleBtn.textContent = theme.label;
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, theme.id);
+    } catch (err) {
+      // localStorage unavailable (private browsing, etc.) - fine, just won't persist
+    }
+  }
+
+  function initTheme() {
+    let saved = null;
+    try {
+      saved = localStorage.getItem(THEME_STORAGE_KEY);
+    } catch (err) {
+      saved = null;
+    }
+    setTheme(saved || "classic");
+  }
 
   const TRAY_STORAGE_KEY = "rpn-tray-collapsed";
   // Short viewports (phones in portrait, tablets in landscape) start with
@@ -527,9 +561,22 @@ if (typeof window !== "undefined") {
     setTrayCollapsed(!tapePanelEl.classList.contains("collapsed"));
   });
 
+  themeToggleBtn.addEventListener("click", () => {
+    let current = null;
+    try {
+      current = localStorage.getItem(THEME_STORAGE_KEY);
+    } catch (err) {
+      current = null;
+    }
+    const idx = THEMES.findIndex((t) => t.id === (current || "classic"));
+    const next = THEMES[(idx + 1) % THEMES.length];
+    setTheme(next.id);
+  });
+
   renderConvertCategories();
   renderConvertGrid();
   initTray();
+  initTheme();
 
   // Keyboard support
   window.addEventListener("keydown", (e) => {
