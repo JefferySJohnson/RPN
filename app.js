@@ -20,7 +20,7 @@ const RPN = (() => {
 
   // Basic US/imperial <-> metric conversions. `factor` converts the forward
   // direction (unit1 -> unit2) by multiplication; reverse divides by it.
-  const CATEGORY_LABELS = { length: "Length", weight: "Weight", volume: "Volume" };
+  const CATEGORY_LABELS = { length: "Length", weight: "Weight", volume: "Volume", currency: "Currency" };
   const CONVERSIONS = {
     length: [
       { id: "in_cm", fwdLabel: "in→cm", revLabel: "cm→in", factor: 2.54 },
@@ -36,7 +36,29 @@ const RPN = (() => {
       { id: "qt_l", fwdLabel: "qt→L", revLabel: "L→qt", factor: 0.946352946 },
       { id: "floz_ml", fwdLabel: "fl oz→mL", revLabel: "mL→fl oz", factor: 29.5735295625 },
     ],
+    // Factors below are approximate fallback defaults, used only until a
+    // live rate is fetched (see fetchCurrencyRates in the UI section) or a
+    // previously-cached live rate is loaded from localStorage. Ballpark
+    // travel use only - not for anything requiring precision.
+    currency: [
+      { id: "usd_eur", fwdLabel: "USD→EUR", revLabel: "EUR→USD", factor: 0.92 },
+      { id: "usd_gbp", fwdLabel: "USD→GBP", revLabel: "GBP→USD", factor: 0.79 },
+      { id: "eur_gbp", fwdLabel: "EUR→GBP", revLabel: "GBP→EUR", factor: 0.86 },
+    ],
   };
+
+  // Updates the live factor values for the currency category in place.
+  // Called from the UI layer after a successful rate fetch, or when
+  // restoring previously-cached rates on load.
+  function setCurrencyFactors({ usdToEur, usdToGbp, eurToGbp }) {
+    const pairs = CONVERSIONS.currency;
+    const usdEur = pairs.find((p) => p.id === "usd_eur");
+    const usdGbp = pairs.find((p) => p.id === "usd_gbp");
+    const eurGbp = pairs.find((p) => p.id === "eur_gbp");
+    if (usdEur && typeof usdToEur === "number" && !Number.isNaN(usdToEur)) usdEur.factor = usdToEur;
+    if (usdGbp && typeof usdToGbp === "number" && !Number.isNaN(usdToGbp)) usdGbp.factor = usdToGbp;
+    if (eurGbp && typeof eurToGbp === "number" && !Number.isNaN(eurToGbp)) eurGbp.factor = eurToGbp;
+  }
 
   function logEntry(label, value) {
     history.push({ label: label || "", value: formatNumber(value) });
@@ -266,6 +288,7 @@ const RPN = (() => {
     getConversionCategories,
     getConversions,
     convert,
+    setCurrencyFactors,
     setAngleMode,
     getAngleMode,
     getStack,
@@ -295,6 +318,9 @@ if (typeof window !== "undefined") {
   const convertPanelEl = document.getElementById("convertPanel");
   const convertCategoriesEl = document.getElementById("convertCategories");
   const convertGridEl = document.getElementById("convertGrid");
+  const currencyStatusEl = document.getElementById("currencyStatus");
+  const currencyStatusTextEl = document.getElementById("currencyStatusText");
+  const currencyRefreshBtn = document.getElementById("currencyRefreshBtn");
   const tapePanelEl = document.getElementById("tapePanel");
   const trayToggleBtn = document.getElementById("trayToggle");
   const themeToggleBtn = document.getElementById("themeToggle");
@@ -365,6 +391,102 @@ if (typeof window !== "undefined") {
     setTrayCollapsed(collapsed);
   }
 
+  // ---- Live currency rates (USD/EUR/GBP) ----
+  // Rates come from Frankfurter (ECB data, no API key), updated roughly once
+  // a day. That's fine for ballpark travel conversions - this is not meant
+  // to be precise. Rates are cached in localStorage with a timestamp so the
+  // panel can always show how old the data is, and a refresh is always a
+  // manual tap, never a silent background timer.
+  const CURRENCY_STORAGE_KEY = "rpn-currency-rates";
+  const CURRENCY_STALE_MS = 24 * 60 * 60 * 1000; // 24 hours
+  let currencyTimestamp = null; // ms since epoch, or null if never fetched
+  let currencyFetchError = false;
+
+  function loadCachedCurrency() {
+    let saved = null;
+    try {
+      const raw = localStorage.getItem(CURRENCY_STORAGE_KEY);
+      if (raw) saved = JSON.parse(raw);
+    } catch (err) {
+      saved = null;
+    }
+    if (saved && typeof saved.timestamp === "number") {
+      RPN.setCurrencyFactors(saved);
+      currencyTimestamp = saved.timestamp;
+    }
+  }
+
+  function saveCachedCurrency(data) {
+    try {
+      localStorage.setItem(CURRENCY_STORAGE_KEY, JSON.stringify(data));
+    } catch (err) {
+      // localStorage unavailable (private browsing, etc.) - fine, just won't persist
+    }
+  }
+
+  function formatRelativeTime(ms) {
+    const mins = Math.round(ms / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.round(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.round(hours / 24);
+    return `${days}d ago`;
+  }
+
+  function renderCurrencyStatus() {
+    if (activeCategory !== "currency") {
+      currencyStatusEl.classList.add("hidden");
+      return;
+    }
+    currencyStatusEl.classList.remove("hidden");
+
+    if (currencyTimestamp === null) {
+      currencyStatusTextEl.textContent = currencyFetchError
+        ? "No live rates yet (offline) — using approximate defaults"
+        : "Fetching live rates…";
+      currencyStatusEl.classList.add("stale");
+      return;
+    }
+
+    const age = Date.now() - currencyTimestamp;
+    let text = `Rates updated ${formatRelativeTime(age)}`;
+    if (currencyFetchError) text += " (offline — showing last saved rates)";
+    currencyStatusTextEl.textContent = text;
+    currencyStatusEl.classList.toggle("stale", currencyFetchError || age > CURRENCY_STALE_MS);
+  }
+
+  function fetchCurrencyRates() {
+    currencyRefreshBtn.disabled = true;
+    currencyRefreshBtn.classList.add("spinning");
+    fetch("https://api.frankfurter.dev/v1/latest?base=USD&symbols=EUR,GBP")
+      .then((resp) => {
+        if (!resp.ok) throw new Error("bad response");
+        return resp.json();
+      })
+      .then((data) => {
+        const usdToEur = data.rates && data.rates.EUR;
+        const usdToGbp = data.rates && data.rates.GBP;
+        if (typeof usdToEur !== "number" || typeof usdToGbp !== "number") {
+          throw new Error("missing rates");
+        }
+        const eurToGbp = usdToGbp / usdToEur;
+        RPN.setCurrencyFactors({ usdToEur, usdToGbp, eurToGbp });
+        currencyTimestamp = Date.now();
+        currencyFetchError = false;
+        saveCachedCurrency({ usdToEur, usdToGbp, eurToGbp, timestamp: currencyTimestamp });
+        renderConvertGrid();
+      })
+      .catch(() => {
+        currencyFetchError = true;
+        renderCurrencyStatus();
+      })
+      .finally(() => {
+        currencyRefreshBtn.disabled = false;
+        currencyRefreshBtn.classList.remove("spinning");
+      });
+  }
+
   let activeCategory = RPN.getConversionCategories()[0]?.id || "length";
 
   function renderConvertCategories() {
@@ -402,6 +524,7 @@ if (typeof window !== "undefined") {
       revBtn.dataset.dir = "rev";
       convertGridEl.appendChild(revBtn);
     });
+    renderCurrencyStatus();
   }
 
   function switchTab(tab) {
@@ -550,6 +673,8 @@ if (typeof window !== "undefined") {
     renderConvertGrid();
   });
 
+  currencyRefreshBtn.addEventListener("click", fetchCurrencyRates);
+
   convertGridEl.addEventListener("click", (e) => {
     const btn = e.target.closest(".convert-btn");
     if (!btn) return;
@@ -573,10 +698,12 @@ if (typeof window !== "undefined") {
     setTheme(next.id);
   });
 
+  loadCachedCurrency();
   renderConvertCategories();
   renderConvertGrid();
   initTray();
   initTheme();
+  fetchCurrencyRates();
 
   // Keyboard support
   window.addEventListener("keydown", (e) => {
