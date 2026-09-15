@@ -44,20 +44,29 @@ const RPN = (() => {
       { id: "usd_eur", fwdLabel: "USD→EUR", revLabel: "EUR→USD", factor: 0.92 },
       { id: "usd_gbp", fwdLabel: "USD→GBP", revLabel: "GBP→USD", factor: 0.79 },
       { id: "eur_gbp", fwdLabel: "EUR→GBP", revLabel: "GBP→EUR", factor: 0.86 },
+      { id: "usd_all", fwdLabel: "USD→ALL", revLabel: "ALL→USD", factor: 92 },
+      { id: "eur_all", fwdLabel: "EUR→ALL", revLabel: "ALL→EUR", factor: 100 },
+      { id: "usd_lkr", fwdLabel: "USD→LKR", revLabel: "LKR→USD", factor: 302 },
     ],
   };
 
   // Updates the live factor values for the currency category in place.
   // Called from the UI layer after a successful rate fetch, or when
   // restoring previously-cached rates on load.
-  function setCurrencyFactors({ usdToEur, usdToGbp, eurToGbp }) {
+  function setCurrencyFactors({ usdToEur, usdToGbp, eurToGbp, usdToAll, eurToAll, usdToLkr }) {
     const pairs = CONVERSIONS.currency;
     const usdEur = pairs.find((p) => p.id === "usd_eur");
     const usdGbp = pairs.find((p) => p.id === "usd_gbp");
     const eurGbp = pairs.find((p) => p.id === "eur_gbp");
+    const usdAll = pairs.find((p) => p.id === "usd_all");
+    const eurAll = pairs.find((p) => p.id === "eur_all");
+    const usdLkr = pairs.find((p) => p.id === "usd_lkr");
     if (usdEur && typeof usdToEur === "number" && !Number.isNaN(usdToEur)) usdEur.factor = usdToEur;
     if (usdGbp && typeof usdToGbp === "number" && !Number.isNaN(usdToGbp)) usdGbp.factor = usdToGbp;
     if (eurGbp && typeof eurToGbp === "number" && !Number.isNaN(eurToGbp)) eurGbp.factor = eurToGbp;
+    if (usdAll && typeof usdToAll === "number" && !Number.isNaN(usdToAll)) usdAll.factor = usdToAll;
+    if (eurAll && typeof eurToAll === "number" && !Number.isNaN(eurToAll)) eurAll.factor = eurToAll;
+    if (usdLkr && typeof usdToLkr === "number" && !Number.isNaN(usdToLkr)) usdLkr.factor = usdToLkr;
   }
 
   function logEntry(label, value) {
@@ -391,7 +400,7 @@ if (typeof window !== "undefined") {
     setTrayCollapsed(collapsed);
   }
 
-  // ---- Live currency rates (USD/EUR/GBP) ----
+  // ---- Live currency rates (USD/EUR/GBP/ALL/LKR) ----
   // Rates come from Frankfurter (ECB data, no API key), updated roughly once
   // a day. That's fine for ballpark travel conversions - this is not meant
   // to be precise. Rates are cached in localStorage with a timestamp so the
@@ -456,10 +465,15 @@ if (typeof window !== "undefined") {
     currencyStatusEl.classList.toggle("stale", currencyFetchError || age > CURRENCY_STALE_MS);
   }
 
+  // Frankfurter (ECB data) covers EUR/GBP but not ALL or LKR - those aren\'t
+  // ECB reference-rate currencies. open.er-api.com is a second, no-key
+  // source that does carry them, pulled in parallel so the existing
+  // EUR/GBP behavior is unaffected if this second call fails.
   function fetchCurrencyRates() {
     currencyRefreshBtn.disabled = true;
     currencyRefreshBtn.classList.add("spinning");
-    fetch("https://api.frankfurter.dev/v1/latest?base=USD&symbols=EUR,GBP")
+
+    const majors = fetch("https://api.frankfurter.dev/v1/latest?base=USD&symbols=EUR,GBP")
       .then((resp) => {
         if (!resp.ok) throw new Error("bad response");
         return resp.json();
@@ -470,11 +484,37 @@ if (typeof window !== "undefined") {
         if (typeof usdToEur !== "number" || typeof usdToGbp !== "number") {
           throw new Error("missing rates");
         }
+        return { usdToEur, usdToGbp };
+      });
+
+    const exotics = fetch("https://open.er-api.com/v6/latest/USD")
+      .then((resp) => {
+        if (!resp.ok) throw new Error("bad response");
+        return resp.json();
+      })
+      .then((data) => {
+        const usdToAll = data.rates && data.rates.ALL;
+        const usdToLkr = data.rates && data.rates.LKR;
+        if (typeof usdToAll !== "number" || typeof usdToLkr !== "number") {
+          throw new Error("missing rates");
+        }
+        return { usdToAll, usdToLkr };
+      })
+      .catch(() => null); // ALL/LKR are a bonus feed - don\'t fail the whole refresh if it\'s down
+
+    Promise.all([majors, exotics])
+      .then(([{ usdToEur, usdToGbp }, exoticRates]) => {
         const eurToGbp = usdToGbp / usdToEur;
-        RPN.setCurrencyFactors({ usdToEur, usdToGbp, eurToGbp });
+        const factors = { usdToEur, usdToGbp, eurToGbp };
+        if (exoticRates) {
+          factors.usdToAll = exoticRates.usdToAll;
+          factors.usdToLkr = exoticRates.usdToLkr;
+          factors.eurToAll = exoticRates.usdToAll / usdToEur;
+        }
+        RPN.setCurrencyFactors(factors);
         currencyTimestamp = Date.now();
         currencyFetchError = false;
-        saveCachedCurrency({ usdToEur, usdToGbp, eurToGbp, timestamp: currencyTimestamp });
+        saveCachedCurrency({ ...factors, timestamp: currencyTimestamp });
         renderConvertGrid();
       })
       .catch(() => {
