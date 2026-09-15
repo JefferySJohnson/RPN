@@ -468,6 +468,135 @@ body {
   background: var(--key-bg);
 }
 
+.finance-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 190px;
+  overflow-y: auto;
+}
+
+.fin-registers {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fin-row {
+  display: grid;
+  grid-template-columns: 44px 1fr auto auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.fin-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.fin-value {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.fin-row .pill {
+  padding: 4px 8px;
+  font-size: 10px;
+}
+
+.fin-settings-row {
+  display: flex;
+  gap: 6px;
+}
+
+.fin-status {
+  font-size: 10px;
+  color: var(--text-dim);
+  min-height: 12px;
+}
+
+.fin-status.error {
+  color: var(--danger);
+}
+
+.fin-amort {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 8px;
+}
+
+.fin-label-input {
+  background: var(--key-bg);
+  color: var(--key-text);
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  width: 100%;
+}
+
+.fin-label-input::placeholder {
+  color: var(--text-dim);
+}
+
+.fin-amort-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.fin-amort-actions .pill {
+  flex: 1;
+  padding: 8px 6px;
+  font-size: 11px;
+}
+
+.tape-amort-text {
+  white-space: normal;
+  text-align: left;
+  line-height: 1.4;
+}
+
+.tape-amort-text.amort-title {
+  font-weight: 700;
+  color: #6b1220;
+  margin-top: 4px;
+}
+
+.tape-amort-text.amort-summary {
+  color: #5a4a2a;
+  font-size: 12px;
+  margin-bottom: 2px;
+}
+
+.tape-amort-row {
+  display: grid;
+  grid-template-columns: 0.5fr 1.1fr 1fr 1fr 1.1fr;
+  gap: 3px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.tape-amort-row span {
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tape-amort-row span:first-child {
+  text-align: left;
+}
+
+.amort-row-header span {
+  color: #8a6d3b;
+  font-weight: 700;
+}
+
 @media (max-width: 380px) {
   .key { font-size: 15px; padding: 14px 0; }
   .entry { font-size: 26px; }

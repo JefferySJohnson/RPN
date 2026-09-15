@@ -83,6 +83,7 @@
       <div class="tabs" id="panelTabs">
         <button class="pill tab-btn active" data-tab="tape" type="button">Tape</button>
         <button class="pill tab-btn" data-tab="convert" type="button">Convert</button>
+        <button class="pill tab-btn" data-tab="finance" type="button">Finance</button>
       </div>
       <div class="header-right">
         <div class="tape-actions" id="tapeActions">
@@ -103,6 +104,22 @@
           <button id="currencyRefreshBtn" class="pill currency-refresh" type="button" aria-label="Refresh currency rates">⟳ Refresh</button>
         </div>
         <div class="convert-grid" id="convertGrid"></div>
+      </div>
+
+      <div class="finance-panel hidden" id="financePanel">
+        <div class="fin-registers" id="finRegisters"></div>
+        <div class="fin-settings-row">
+          <button id="finBeginToggle" class="pill" type="button">END</button>
+          <button id="finClear" class="pill" type="button">Clear FIN</button>
+        </div>
+        <div class="fin-status" id="finStatus"></div>
+        <div class="fin-amort">
+          <input id="finLabel" class="fin-label-input" type="text" placeholder="Label (optional)" maxlength="60" />
+          <div class="fin-amort-actions">
+            <button id="finAmortMonth" class="pill" type="button">→ Tape (Monthly)</button>
+            <button id="finAmortYear" class="pill" type="button">→ Tape (Yearly)</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>

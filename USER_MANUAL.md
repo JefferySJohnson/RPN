@@ -147,10 +147,72 @@ The Convert tab turns the current **x** value into a unit conversion calculator.
 | Length | in ⇄ cm, ft ⇄ m, mi ⇄ km |
 | Weight | lb ⇄ kg, oz ⇄ g |
 | Volume | gal ⇄ L, qt ⇄ L, fl oz ⇄ mL |
+| Currency | USD ⇄ EUR, USD ⇄ GBP, EUR ⇄ GBP, USD ⇄ ALL (Albanian Lek), EUR ⇄ ALL, USD ⇄ LKR (Sri Lankan Rupee) |
 
 Tapping a conversion button works just like a scientific function: it takes whatever's currently on the entry line (typing a number first isn't required — it'll auto-push, same as pressing `sin` or `√x`), converts it, and replaces **x** with the result. The conversion also gets logged to the tape with its label (e.g. `in→cm`), so switching back to the Tape tab shows a record of what was converted, even though the two tabs share one panel.
 
-Currency conversion (live exchange rates) isn't included yet — it needs a network call to a rate source, which is a bigger addition than these fixed unit conversions. It's on the list for a future update.
+Currency is a live category: instead of a fixed number, its rates come from the internet and stay current from day to day. A status line above the grid shows how old the rates are (e.g. "Rates updated 3h ago"), turning red once they're more than 24 hours old or if the last fetch failed — tap **⟳ Refresh** to pull fresh ones anytime. If you're offline, it just keeps using the last rates it managed to save, so it still works, it just tells you the rates aren't current.
+
+## Time Value of Money
+
+The **Finance** tab (next to Tape and Convert) is a small financial calculator built into the app — the kind used for loans, mortgages, and savings goals. If you've never used one of these before, here's what's going on and how to drive it.
+
+### The five numbers
+
+Every loan or savings plan with regular equal payments and a steady interest rate is described by five numbers:
+
+| Register | What it means |
+|---|---|
+| **N** | Total number of payments (e.g. 360 for a 30-year monthly mortgage) |
+| **I/YR** | The annual interest rate, as a percent (e.g. 6.5, not 0.065) |
+| **PV** | Present Value — a lump sum today (the loan amount, or a starting savings balance) |
+| **PMT** | The payment made each period |
+| **FV** | Future Value — what's left at the end (usually 0 for a loan you pay off completely) |
+
+The trick that makes this useful: if you know any **four** of these, the calculator can solve for the fifth. Want to know your mortgage payment? Enter the loan amount, rate, and term, and solve for PMT. Want to know how much you'd need to save monthly to hit a goal? Enter the goal as FV, enter 0 as PV, and solve for PMT. Same five boxes, different question.
+
+### How to use it
+
+Each of the five rows works the same way as the app's other panels — the number you're solving *from* comes off the calculator's regular entry line (the same **x** at the top you type into for everyday math):
+
+1. Type a number on the keypad.
+2. Switch to the **Finance** tab.
+3. Tap **Store** next to the register you want that number to go into.
+4. Repeat for each of the four numbers you know.
+5. Tap **Solve** next to the one you don't know.
+
+The answer appears in that register *and* flows back up into the main display, so you can keep using it — chain it into more math, or use it right away to generate a payment schedule (below).
+
+**Worked example — a mortgage payment:** you're borrowing $300,000 for 30 years at 6.5% annual interest, paid monthly.
+
+```
+300000  Store → PV
+360     Store → N       (30 years × 12 months)
+6.5     Store → I/YR
+0       Store → FV       (paid off completely at the end)
+        Solve  → PMT     (the calculator shows about -1,896.20)
+```
+
+Notice the payment comes back **negative**. That's normal, not an error — it's money going *out* of your pocket, while PV (the loan you received) was positive money coming *in*. Every financial calculator works this way; it's what lets it tell a loan apart from a savings plan using the same five boxes.
+
+### Two settings that matter
+
+Two small settings change the answer and are easy to overlook:
+
+- **P/YR** (payments per year) — how many payments happen in a year. For a monthly mortgage this is 12; it's stored the same way as the other five registers (type 12, tap Store next to P/YR). It's already 12 by default.
+- **END / BEGIN** — a pill button that toggles whether payments happen at the *end* of each period (**END** — the normal case for a mortgage or car loan) or the *start* (**BEGIN** — used for things like a lease payment). Leave it on END unless you have a specific reason to switch it.
+
+**Clear FIN** resets all five registers (not P/YR or Begin/End) so you can start a fresh calculation without any of the old numbers lingering.
+
+### Printing a payment schedule (amortization)
+
+Once you've solved for PMT (or entered it directly), you can print a full payment-by-payment schedule to the paper tape, showing exactly how much of each payment is interest versus paying down the loan:
+
+1. Optionally type a label in the text box (e.g. "Home refinance") — it becomes a title line at the top of the schedule.
+2. Tap **→ Tape (Monthly)** for every single payment, or **→ Tape (Yearly)** to get one summarized row per year instead — much easier to read for a 30-year loan.
+3. Switch to the **Tape** tab (it'll jump you there automatically) to see the result: a header line with the loan details, then a row per payment (or year) showing the payment amount, how much was interest, how much was principal, and the balance remaining.
+
+The schedule is added to the same paper tape as everything else, so **Export .txt** picks it up too if you want a copy outside the app. It doesn't attach calendar dates or months — just payment numbers in order — since that's easy enough to line up with a real calendar yourself if you need to.
 
 ## Installing it as an app
 

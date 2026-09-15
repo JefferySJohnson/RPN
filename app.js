@@ -280,6 +280,35 @@ const RPN = (() => {
     return s;
   }
 
+  function peekX() {
+    pushPendingIfAny();
+    if (stack.length === 0) return null;
+    return stack[stack.length - 1];
+  }
+
+  function setX(value, label) {
+    pushPendingIfAny();
+    if (stack.length > 0) stack.pop();
+    stack.push(value);
+    logEntry(label || "", value);
+  }
+
+  function logNote(label, value) {
+    logEntry(label, value);
+  }
+
+  function noteMarker(text) {
+    logMarker(text);
+  }
+
+  function logAmortText(text, style) {
+    history.push({ amortText: true, text, style: style || "summary" });
+  }
+
+  function logAmortRow(cols, isHeader) {
+    history.push({ amortRow: true, cols, isHeader: !!isHeader });
+  }
+
   return {
     inputDigit,
     inputDecimal,
@@ -306,12 +335,245 @@ const RPN = (() => {
     hasPending,
     getHistory,
     clearTape,
+    peekX,
+    setX,
+    logNote,
+    noteMarker,
+    logAmortText,
+    logAmortRow,
+  };
+})();
+
+// ---------------------------------------------------------------------
+// Financial (Time Value of Money) engine
+//
+// The classic 5-register TVM solver used by HP-12C/10bII-style financial
+// calculators: N (number of periods), I/YR (nominal annual rate, as a
+// percent), PV (present value), PMT (payment per period), FV (future
+// value). Given any four, it solves the fifth. P/YR (payments per year)
+// and Begin/End (annuity due vs. ordinary annuity) are settings, not
+// solved-for values.
+//
+// Sign convention: these formulas honor whatever signs are entered -
+// money paid out is naturally negative, money received is positive, same
+// as any financial calculator. The amortization generator below is a
+// separate, friendlier tool that works off magnitudes only, so printing
+// a payment schedule doesn't require thinking about sign conventions.
+// ---------------------------------------------------------------------
+const FIN = (() => {
+  let regs = { n: null, iYr: null, pv: null, pmt: null, fv: null };
+  let pYr = 12;
+  let begin = false;
+
+  function setReg(id, value) {
+    if (id === "pYr") {
+      if (typeof value === "number" && value > 0) pYr = value;
+      return;
+    }
+    if (id in regs) regs[id] = value;
+  }
+
+  function getRegs() {
+    return Object.assign({}, regs, { pYr });
+  }
+
+  function setBegin(v) {
+    begin = !!v;
+  }
+
+  function getSettings() {
+    return { pYr, begin };
+  }
+
+  function clearFin() {
+    regs = { n: null, iYr: null, pv: null, pmt: null, fv: null };
+  }
+
+  function periodicRate(iYrVal) {
+    return iYrVal / 100 / pYr;
+  }
+
+  function tvmResidual(i, n, pv, pmt, fv, beginFlag) {
+    if (Math.abs(i) < 1e-12) return pv + pmt * n + fv;
+    const s = beginFlag ? 1 + i : 1;
+    return pv * Math.pow(1 + i, n) + pmt * s * ((Math.pow(1 + i, n) - 1) / i) + fv;
+  }
+
+  function solveNFromI(i, pv, pmt, fv, beginFlag) {
+    if (Math.abs(i) < 1e-12) {
+      if (pmt === 0) return null;
+      return -(pv + fv) / pmt;
+    }
+    const s = beginFlag ? 1 + i : 1;
+    const k = (s * pmt) / i;
+    const numerator = k - fv;
+    const denominator = pv + k;
+    if (numerator === 0 || denominator === 0 || numerator / denominator <= 0) return null;
+    return Math.log(numerator / denominator) / Math.log(1 + i);
+  }
+
+  function solvePVFromI(i, n, pmt, fv, beginFlag) {
+    const s = beginFlag ? 1 + i : 1;
+    if (Math.abs(i) < 1e-12) return -(fv + pmt * n);
+    const factor = Math.pow(1 + i, n);
+    return -(fv + pmt * s * ((factor - 1) / i)) / factor;
+  }
+
+  function solveFVFromI(i, n, pv, pmt, beginFlag) {
+    const s = beginFlag ? 1 + i : 1;
+    if (Math.abs(i) < 1e-12) return -(pv + pmt * n);
+    const factor = Math.pow(1 + i, n);
+    return -(pv * factor + pmt * s * ((factor - 1) / i));
+  }
+
+  function solvePMTFromI(i, n, pv, fv, beginFlag) {
+    const s = beginFlag ? 1 + i : 1;
+    if (Math.abs(i) < 1e-12) return -(fv + pv) / n;
+    const factor = Math.pow(1 + i, n);
+    return (-(fv + pv * factor) * i) / (s * (factor - 1));
+  }
+
+  // No closed form for the rate - bisection on a bracket sized to the
+  // period count so (1+i)^n never overflows a double.
+  function solveIPeriodic(n, pv, pmt, fv, beginFlag) {
+    const lo = -0.999999;
+    const maxExp = 250 / Math.max(1, Math.abs(n));
+    const hi = Math.min(10, Math.pow(10, maxExp) - 1);
+    const f = (i) => tvmResidual(i, n, pv, pmt, fv, beginFlag);
+    const fLoStart = f(lo);
+    const fHiStart = f(hi);
+    if (!Number.isFinite(fLoStart) || !Number.isFinite(fHiStart) || fLoStart * fHiStart > 0) return null;
+    let a = lo;
+    let b = hi;
+    let fa = fLoStart;
+    for (let iter = 0; iter < 200; iter++) {
+      const mid = (a + b) / 2;
+      const fMid = f(mid);
+      if (fMid === 0 || b - a < 1e-15) return mid;
+      if (fa < 0 === fMid < 0) {
+        a = mid;
+        fa = fMid;
+      } else {
+        b = mid;
+      }
+    }
+    return (a + b) / 2;
+  }
+
+  const REG_LABELS = { n: "N", iYr: "I/YR", pv: "PV", pmt: "PMT", fv: "FV" };
+
+  function solve(target) {
+    const need = ["n", "iYr", "pv", "pmt", "fv"].filter((r) => r !== target);
+    const missing = need.filter((r) => regs[r] === null || regs[r] === undefined);
+    if (missing.length) {
+      return { error: "Need " + missing.map((r) => REG_LABELS[r]).join(", ") + " set first" };
+    }
+    let result;
+    if (target === "iYr") {
+      const iSolved = solveIPeriodic(regs.n, regs.pv, regs.pmt, regs.fv, begin);
+      result = iSolved === null ? null : iSolved * pYr * 100;
+    } else {
+      const i = periodicRate(regs.iYr);
+      switch (target) {
+        case "n":
+          result = solveNFromI(i, regs.pv, regs.pmt, regs.fv, begin);
+          break;
+        case "pv":
+          result = solvePVFromI(i, regs.n, regs.pmt, regs.fv, begin);
+          break;
+        case "fv":
+          result = solveFVFromI(i, regs.n, regs.pv, regs.pmt, begin);
+          break;
+        case "pmt":
+          result = solvePMTFromI(i, regs.n, regs.pv, regs.fv, begin);
+          break;
+        default:
+          result = null;
+      }
+    }
+    if (result === null || result === undefined || !Number.isFinite(result)) {
+      return { error: "No solution found for those values" };
+    }
+    regs[target] = result;
+    return { value: result };
+  }
+
+  const MAX_AMORT_PERIODS = 1200; // 100 years monthly - generous safety cap
+
+  function generateAmortRows(opts) {
+    opts = opts || {};
+    const need = ["n", "iYr", "pv", "pmt"].filter((r) => regs[r] === null || regs[r] === undefined);
+    if (need.length) {
+      return { error: "Need " + need.map((r) => REG_LABELS[r]).join(", ") + " set first (solve PMT if you haven't)" };
+    }
+    const totalPeriods = Math.max(1, Math.round(regs.n));
+    if (totalPeriods > MAX_AMORT_PERIODS) {
+      return { error: "N is too large for a schedule (max " + MAX_AMORT_PERIODS + " periods)" };
+    }
+    const i = periodicRate(regs.iYr);
+    const balance0 = Math.abs(regs.pv);
+    const payMag = Math.abs(regs.pmt);
+    const fvTarget = regs.fv !== null && regs.fv !== undefined ? Math.abs(regs.fv) : 0;
+
+    const rows = [];
+    let balance = balance0;
+    for (let t = 1; t <= totalPeriods; t++) {
+      let interest;
+      let principal;
+      let newBalance;
+      if (begin) {
+        const postPay = balance - payMag;
+        interest = postPay * i;
+        newBalance = postPay + interest;
+        principal = balance - newBalance;
+      } else {
+        interest = balance * i;
+        principal = payMag - interest;
+        newBalance = balance - principal;
+      }
+      if (t === totalPeriods) {
+        // land exactly on the target balance, absorbing float drift into
+        // the last period the way real amortization tables do
+        principal = balance - fvTarget;
+        interest = payMag - principal;
+        newBalance = fvTarget;
+      }
+      rows.push({ period: t, payment: payMag, interest, principal, balance: newBalance });
+      balance = newBalance;
+    }
+
+    if (opts.summarize === "year") {
+      const yearRows = [];
+      for (let start = 0; start < rows.length; start += pYr) {
+        const chunk = rows.slice(start, start + pYr);
+        const yearNum = Math.floor(start / pYr) + 1;
+        yearRows.push({
+          period: yearNum,
+          payment: chunk.reduce((s, r) => s + r.payment, 0),
+          interest: chunk.reduce((s, r) => s + r.interest, 0),
+          principal: chunk.reduce((s, r) => s + r.principal, 0),
+          balance: chunk[chunk.length - 1].balance,
+        });
+      }
+      return { rows: yearRows, totalPeriods, unit: "year" };
+    }
+    return { rows, totalPeriods, unit: "month" };
+  }
+
+  return {
+    setReg,
+    getRegs,
+    setBegin,
+    getSettings,
+    clearFin,
+    solve,
+    generateAmortRows,
   };
 })();
 
 // Export for node-based unit testing; no-op in the browser.
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = RPN;
+  module.exports = { RPN, FIN };
 }
 
 // ---- UI wiring (browser only) ----
@@ -333,6 +595,14 @@ if (typeof window !== "undefined") {
   const tapePanelEl = document.getElementById("tapePanel");
   const trayToggleBtn = document.getElementById("trayToggle");
   const themeToggleBtn = document.getElementById("themeToggle");
+  const financePanelEl = document.getElementById("financePanel");
+  const finRegistersEl = document.getElementById("finRegisters");
+  const finBeginToggleBtn = document.getElementById("finBeginToggle");
+  const finClearBtn = document.getElementById("finClear");
+  const finStatusEl = document.getElementById("finStatus");
+  const finLabelInput = document.getElementById("finLabel");
+  const finAmortMonthBtn = document.getElementById("finAmortMonth");
+  const finAmortYearBtn = document.getElementById("finAmortYear");
 
   const THEME_STORAGE_KEY = "rpn-theme";
   const THEMES = [
@@ -527,6 +797,96 @@ if (typeof window !== "undefined") {
       });
   }
 
+  // ---- Finance (TVM) panel ----
+  const FIN_REGS = [
+    { id: "n", label: "N" },
+    { id: "iYr", label: "I/YR" },
+    { id: "pv", label: "PV" },
+    { id: "pmt", label: "PMT" },
+    { id: "fv", label: "FV" },
+  ];
+  const FIN_LABELS = { n: "N", iYr: "I/YR", pv: "PV", pmt: "PMT", fv: "FV", pYr: "P/YR" };
+
+  function formatMoney(n) {
+    if (n === null || n === undefined) return "—";
+    if (Number.isNaN(n)) return "Error";
+    const sign = n < 0 ? "-" : "";
+    return sign + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function formatPercent(n) {
+    if (n === null || n === undefined) return "—";
+    if (Number.isNaN(n)) return "Error";
+    return n.toFixed(3) + "%";
+  }
+
+  function formatN(n) {
+    if (n === null || n === undefined) return "—";
+    if (Number.isNaN(n)) return "Error";
+    return Number.isInteger(n) ? String(n) : n.toFixed(3);
+  }
+
+  function showFinStatus(text, isError) {
+    finStatusEl.textContent = text;
+    finStatusEl.classList.toggle("error", !!isError);
+  }
+
+  function renderFinRegisters() {
+    const regs = FIN.getRegs();
+    const settings = FIN.getSettings();
+    finRegistersEl.innerHTML = "";
+    FIN_REGS.forEach((r) => {
+      const row = document.createElement("div");
+      row.className = "fin-row";
+      const val = regs[r.id];
+      const displayVal = r.id === "iYr" ? formatPercent(val) : r.id === "n" ? formatN(val) : formatMoney(val);
+      row.innerHTML =
+        '<span class="fin-label">' + r.label + '</span>' +
+        '<span class="fin-value">' + displayVal + '</span>' +
+        '<button class="pill fin-store" data-reg="' + r.id + '" type="button">Store</button>' +
+        '<button class="pill fin-solve" data-reg="' + r.id + '" type="button">Solve</button>';
+      finRegistersEl.appendChild(row);
+    });
+    const pYrRow = document.createElement("div");
+    pYrRow.className = "fin-row";
+    pYrRow.innerHTML =
+      '<span class="fin-label">P/YR</span>' +
+      '<span class="fin-value">' + settings.pYr + '</span>' +
+      '<button class="pill fin-store" data-reg="pYr" type="button">Store</button>' +
+      '<span></span>';
+    finRegistersEl.appendChild(pYrRow);
+    finBeginToggleBtn.textContent = settings.begin ? "BEGIN" : "END";
+  }
+
+  function runAmortize(summarize) {
+    const gen = FIN.generateAmortRows({ summarize });
+    if (gen.error) {
+      showFinStatus(gen.error, true);
+      return;
+    }
+    const regs = FIN.getRegs();
+    const settings = FIN.getSettings();
+    const years = gen.totalPeriods / settings.pYr;
+    const yearsStr = Number.isInteger(years) ? String(years) : years.toFixed(1);
+    const summaryLine =
+      formatMoney(Math.abs(regs.pv)) + " over " + gen.totalPeriods + " payments (" + yearsStr + " yr) at " +
+      formatPercent(regs.iYr) + " APR, " + settings.pYr + "/yr, " + (settings.begin ? "Begin" : "End") +
+      " — payment " + formatMoney(Math.abs(regs.pmt));
+    const label = finLabelInput.value.trim();
+    if (label) RPN.logAmortText(label, "title");
+    RPN.logAmortText(summaryLine, "summary");
+    RPN.logAmortRow(["#", "Payment", "Interest", "Principal", "Balance"], true);
+    gen.rows.forEach((r) => {
+      RPN.logAmortRow(
+        [String(r.period), formatMoney(r.payment), formatMoney(r.interest), formatMoney(r.principal), formatMoney(r.balance)],
+        false
+      );
+    });
+    renderTape();
+    switchTab("tape");
+    showFinStatus("Added a " + gen.rows.length + "-row amortization schedule to the tape", false);
+  }
+
   let activeCategory = RPN.getConversionCategories()[0]?.id || "length";
 
   function renderConvertCategories() {
@@ -571,15 +931,11 @@ if (typeof window !== "undefined") {
     panelTabsEl.querySelectorAll(".tab-btn").forEach((b) => {
       b.classList.toggle("active", b.dataset.tab === tab);
     });
-    if (tab === "convert") {
-      tapeEl.classList.add("hidden");
-      tapeActionsEl.classList.add("hidden");
-      convertPanelEl.classList.remove("hidden");
-    } else {
-      tapeEl.classList.remove("hidden");
-      tapeActionsEl.classList.remove("hidden");
-      convertPanelEl.classList.add("hidden");
-    }
+    tapeEl.classList.toggle("hidden", tab !== "tape");
+    tapeActionsEl.classList.toggle("hidden", tab !== "tape");
+    convertPanelEl.classList.toggle("hidden", tab !== "convert");
+    financePanelEl.classList.toggle("hidden", tab !== "finance");
+    if (tab === "finance") renderFinRegisters();
   }
 
   function renderTape() {
@@ -587,7 +943,13 @@ if (typeof window !== "undefined") {
     tapeEl.innerHTML = "";
     hist.forEach((entry) => {
       const row = document.createElement("div");
-      if (entry.marker) {
+      if (entry.amortText) {
+        row.className = "tape-amort-text " + (entry.style === "title" ? "amort-title" : "amort-summary");
+        row.textContent = entry.text;
+      } else if (entry.amortRow) {
+        row.className = "tape-amort-row" + (entry.isHeader ? " amort-row-header" : "");
+        row.innerHTML = entry.cols.map((c) => `<span>${c}</span>`).join("");
+      } else if (entry.marker) {
         row.className = "tape-marker";
         row.textContent = entry.text;
       } else {
@@ -601,9 +963,12 @@ if (typeof window !== "undefined") {
 
   function exportTape() {
     const hist = RPN.getHistory();
-    const lines = hist.map((e) =>
-      e.marker ? `--- ${e.text} ---` : `${(e.label || "").padEnd(6)}${String(e.value).padStart(12)}`
-    );
+    const lines = hist.map((e) => {
+      if (e.amortText) return e.text;
+      if (e.amortRow) return e.cols.map((c) => String(c).padStart(13)).join("");
+      if (e.marker) return `--- ${e.text} ---`;
+      return `${(e.label || "").padEnd(6)}${String(e.value).padStart(12)}`;
+    });
     const text = lines.join("\n") + "\n";
     const blob = new Blob([text], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
@@ -722,6 +1087,53 @@ if (typeof window !== "undefined") {
     render();
   });
 
+  financePanelEl.addEventListener("click", (e) => {
+    const storeBtn = e.target.closest(".fin-store");
+    if (storeBtn) {
+      const reg = storeBtn.dataset.reg;
+      const x = RPN.peekX();
+      if (x === null || Number.isNaN(x)) {
+        showFinStatus("Nothing to store — type a number first", true);
+        return;
+      }
+      FIN.setReg(reg, x);
+      RPN.logNote("→" + FIN_LABELS[reg], x);
+      renderFinRegisters();
+      render();
+      showFinStatus("Stored " + x + " → " + FIN_LABELS[reg], false);
+      return;
+    }
+    const solveBtn = e.target.closest(".fin-solve");
+    if (solveBtn) {
+      const reg = solveBtn.dataset.reg;
+      const result = FIN.solve(reg);
+      if (result.error) {
+        showFinStatus(result.error, true);
+        return;
+      }
+      RPN.setX(result.value, FIN_LABELS[reg]);
+      renderFinRegisters();
+      render();
+      showFinStatus("Solved " + FIN_LABELS[reg] + " = " + RPN.formatNumber(result.value), false);
+    }
+  });
+
+  finBeginToggleBtn.addEventListener("click", () => {
+    FIN.setBegin(!FIN.getSettings().begin);
+    renderFinRegisters();
+  });
+
+  finClearBtn.addEventListener("click", () => {
+    FIN.clearFin();
+    renderFinRegisters();
+    RPN.noteMarker("FIN CLEAR");
+    renderTape();
+    showFinStatus("Cleared N, I/YR, PV, PMT, FV", false);
+  });
+
+  finAmortMonthBtn.addEventListener("click", () => runAmortize("month"));
+  finAmortYearBtn.addEventListener("click", () => runAmortize("year"));
+
   trayToggleBtn.addEventListener("click", () => {
     setTrayCollapsed(!tapePanelEl.classList.contains("collapsed"));
   });
@@ -741,6 +1153,7 @@ if (typeof window !== "undefined") {
   loadCachedCurrency();
   renderConvertCategories();
   renderConvertGrid();
+  renderFinRegisters();
   initTray();
   initTheme();
   fetchCurrencyRates();

@@ -92,6 +92,30 @@ Two read-only accessors expose the table to the UI without letting it reach into
 
 Adding a new conversion pair or an entirely new category is a data-only change: extend `CONVERSIONS` (and `CATEGORY_LABELS` for a new category) and the UI picks it up automatically, since `renderConvertCategories()`/`renderConvertGrid()` build their buttons from `getConversionCategories()`/`getConversions()` rather than any hardcoded list.
 
+### Live currency rates
+
+Currency is a `CONVERSIONS` category like the others (`usd_eur`, `usd_gbp`, `eur_gbp`, `usd_all`, `eur_all`, `usd_lkr`), but its `factor` values are overwritten at runtime instead of staying fixed. `setCurrencyFactors()` patches the matching pairs' `factor` in place given a bag of `usdToX` rates.
+
+Two data sources are fetched in parallel by `fetchCurrencyRates()`: Frankfurter (ECB reference rates) supplies EUR/GBP, and open.er-api.com supplies ALL and LKR, since neither is an ECB reference-rate currency. The two calls are independent - if the exotic-currency call fails, EUR/GBP still update normally, and vice versa. Successful rates are cached in `localStorage` (`rpn-currency-rates`) with a timestamp, restored on load via `loadCachedCurrency()`, and shown as an age indicator (`renderCurrencyStatus()`) that flags itself past 24 hours old or on a fetch error. The refresh is always a manual tap (the "⟳ Refresh" button) - there's no background polling.
+
+### Financial (TVM) engine
+
+A second, independent module - `FIN`, defined right after `RPN`'s closing IIFE - implements the classic 5-register time-value-of-money solver (N, I/YR, PV, PMT, FV) used by HP-12C/10bII-style financial calculators, plus an amortization-schedule generator built on top of it. It's independent of `RPN` on purpose: the TVM registers are their own store (`regs`, `pYr`, `begin`), not stack values, so nothing here touches `stack` or `entry` directly - the UI layer is what bridges the two (see "Finance panel" below).
+
+**The core relationship.** All five registers satisfy one equation per period:
+
+```
+PV·(1+i)ⁿ + PMT·(1+i·S)·[(1+i)ⁿ−1]/i + FV = 0
+```
+
+where `i` is the periodic rate (`I/YR / 100 / P/YR`) and `S` is `1` in Begin mode (annuity due - payment at the start of the period) or `0` in End mode (ordinary annuity - the normal case for a mortgage). `tvmResidual()` evaluates the left-hand side for a candidate `i`; the closed-form solvers for N, PV, PMT, and FV are each that equation rearranged algebraically, with an `i ≈ 0` branch (`Math.abs(i) < 1e-12`) to sidestep division by zero, since the formula degenerates to `PV + PMT·n + FV = 0` at a zero rate.
+
+**Solving for I/YR is the one register with no closed form.** `solveIPeriodic()` brackets a root and bisects: the upper bound is sized dynamically from N (`10 ** (250 / n) - 1`, capped at 10) so that `(1+i)ⁿ` never overflows a double and silently produces `NaN` - a fixed bound like `10` (1000%/period) works for a 1-year loan but overflows for a 30-year monthly one (`n = 360`). 200 bisection iterations comfortably exceed the precision a calculator display needs; if the residual doesn't change sign across the bracket, `solve('iYr')` reports "no solution" rather than returning garbage.
+
+**`solve(target)`** is the single entry point the UI calls: it checks the other four registers are set (a register holding `0` counts as set; only `null`/`undefined` counts as missing), runs the matching solver, stores the result back into `regs`, and returns `{ value }` or `{ error }`. Sign convention is left to the user, same as a real financial calculator - PV positive/PMT negative for a loan you receive and pay down, or PMT negative/FV positive for a savings goal, etc.
+
+**`generateAmortRows({ summarize })`** is a separate, friendlier function that does *not* use `solve()`'s sign convention - it works off `Math.abs(PV)` and `Math.abs(PMT)` so a schedule prints as plain positive dollars regardless of which sign convention was used to solve for PMT. It walks period-by-period (`interest = balance × i; principal = payment − interest; balance −= principal` for End mode; the Begin-mode variant applies the payment before that period's interest instead), and forces the *last* row to land exactly on the FV target (`principal = balance − fvTarget`) rather than letting floating-point drift leave a fraction of a cent unaccounted for - the same trick real amortization tables use. `summarize: "year"` sums every `P/YR` rows into one, so a 30-year monthly mortgage collapses to 30 rows instead of 360. `N` is capped at `MAX_AMORT_PERIODS` (1200 - 100 years monthly) as a safety limit against an accidental typo generating an enormous schedule.
+
 ### Tape / history
 
 `history` is an array of `{ label, value }` entries (numbers pushed, operation results) or `{ marker: true, text }` entries (currently just the `"C"` marker `clearAll()` writes). Two things log to it:
@@ -102,6 +126,8 @@ Adding a new conversion pair or an entirely new category is a data-only change: 
 `clearAll()` calls `logMarker("C")` but does **not** clear `history` — the tape is meant to behave like a physical adding-machine tape that keeps printing across register clears. Clearing the visible tape is a separate, explicit action: `clearTape()` empties `history` outright and is only ever called from the UI's "Clear tape" button, never internally.
 
 `getHistory()` returns a shallow copy of the array for rendering/export; callers can't mutate internal state through it.
+
+Two additional shapes support the amortization generator: `{ amortText: true, text, style }` for the optional label/summary lines above a schedule (`style: "title"` renders bold, `"summary"` renders normal weight), and `{ amortRow: true, cols, isHeader }` for the five-column Payment/Interest/Principal/Balance rows themselves, including the column-title row (`isHeader: true`). These are appended via `RPN.logAmortText()`/`RPN.logAmortRow()` rather than `logEntry()`, and get their own rendering/export handling (see "Tape rendering and export" below) since a five-column row doesn't fit the plain `{ label, value }` shape.
 
 ## UI layer
 
@@ -115,15 +141,28 @@ Adding a new conversion pair or an entirely new category is a data-only change: 
 
 ### Tape rendering and export
 
-`renderTape()` rebuilds the `#tape` element from `RPN.getHistory()` on every render: each `{ label, value }` entry becomes a `.tape-row` (label left, value right), each `{ marker }` entry becomes a centered `.tape-marker` line, and the panel auto-scrolls to the bottom afterward.
+`renderTape()` rebuilds the `#tape` element from `RPN.getHistory()` on every render: each `{ label, value }` entry becomes a `.tape-row` (label left, value right), each `{ marker }` entry becomes a centered `.tape-marker` line, each `{ amortText }` entry becomes a left-aligned `.tape-amort-text` line (bold if `style: "title"`), and each `{ amortRow }` entry becomes a five-column `.tape-amort-row` grid (dimmed/bold for the `isHeader` column-title row) - a purpose-built layout distinct from the plain two-column rows, since a payment/interest/principal/balance row doesn't fit a single label+value pair. The panel auto-scrolls to the bottom afterward.
 
-`exportTape()` (wired to the "Export .txt" button) formats the same history array as plain text — `${label.padEnd(6)}${value.padStart(12)}` per line, `--- text ---` for markers — joins it into one string, and triggers a download via a `Blob` + temporary `<a download>` element (no server round-trip). The filename is timestamped (`rpn-tape-YYYYMMDD-HHMMSS.txt`) so repeated exports don't overwrite each other. The "Clear tape" button just calls `RPN.clearTape()` followed by `renderTape()`.
+`exportTape()` (wired to the "Export .txt" button) mirrors that same branching in plain text: `${label.padEnd(6)}${value.padStart(12)}` per line for ordinary entries, `--- text ---` for markers, the raw text for `amortText` lines, and each `amortRow`'s columns right-padded to a fixed width for `amortRow` lines, so an exported amortization schedule still lines up as a readable table. It joins everything into one string and triggers a download via a `Blob` + temporary `<a download>` element (no server round-trip). The filename is timestamped (`rpn-tape-YYYYMMDD-HHMMSS.txt`) so repeated exports don't overwrite each other. The "Clear tape" button just calls `RPN.clearTape()` followed by `renderTape()`.
 
-### Tape/Convert tab switcher
+### Tape/Convert/Finance tab switcher
 
-The tape panel and the conversion grid occupy the same footprint in the layout rather than each getting their own space, so switching tabs doesn't resize the window. `switchTab(tab)` toggles a `.hidden` class (`display: none`) on three elements: `#tape`, `#tapeActions` (the Export/Clear buttons), and `#convertPanel`, showing exactly one pairing at a time — `#tape` + `#tapeActions` for the Tape tab, `#convertPanel` alone for Convert — while also updating which `.tab-btn` carries the `.active` class.
+The tape panel, the conversion grid, and the finance panel occupy the same footprint in the layout rather than each getting their own space, so switching tabs doesn't resize the window. `switchTab(tab)` toggles a `.hidden` class (`display: none`) on four elements: `#tape`, `#tapeActions` (the Export/Clear buttons), `#convertPanel`, and `#financePanel`, showing exactly one pairing at a time — `#tape` + `#tapeActions` for the Tape tab, `#convertPanel` alone for Convert, `#financePanel` alone for Finance — while also updating which `.tab-btn` carries the `.active` class. Switching to Finance also calls `renderFinRegisters()`, since the register values can change without going through the main `render()` loop (a Store doesn't touch the calculator stack).
 
 `renderConvertCategories()` and `renderConvertGrid()` build their buttons from `RPN.getConversionCategories()` / `RPN.getConversions(activeCategory)` rather than any hardcoded markup, so they only need to run once at startup and again whenever `activeCategory` changes (a category pill is clicked) — unlike `renderTape()`, they're not part of the main `render()` loop, since the conversion grid's *contents* never depend on calculator state, only on which category is selected. Clicking a conversion button calls `RPN.convert(category, id, direction)` (reading the three values off the button's `data-*` attributes) and then the normal `render()`, so the result shows up in both the entry line and, once you flip back to the Tape tab, the log.
+
+### Finance panel
+
+`FIN_REGS` (`[{ id: "n", label: "N" }, ...]`) drives `renderFinRegisters()` the same way `getConversionCategories()`/`getConversions()` drive the Convert grid: the five TVM rows (plus a sixth, non-solvable P/YR row) are built from that table rather than hardcoded markup, each with a formatted value (`formatMoney`, `formatPercent`, or `formatN` depending on the register) and a Store/Solve button pair carrying `data-reg`.
+
+A single delegated click listener on `#financePanel` handles both button classes:
+
+- **`.fin-store`** reads the calculator's current **x** value via `RPN.peekX()` (which commits any pending typed entry but, unlike most `RPN` calls, does *not* pop the stack - storing into a register is meant to leave the display alone) and writes it into that register with `FIN.setReg()`.
+- **`.fin-solve`** calls `FIN.solve(reg)` and, on success, calls `RPN.setX()` to both store the answer in the register and replace the calculator's **x** with it - the same "feed the result back into the main display" pattern `convert()` uses.
+
+Both paths call `renderFinRegisters()` to refresh the panel and `showFinStatus()` to post a one-line confirmation or error into `#finStatus` (e.g. "Need N, I/YR, PV, FV set first" when a Solve is attempted without enough registers). `RPN.logNote()`/`RPN.setX()`'s built-in `logEntry()` call mean every Store and Solve also leaves a normal tape entry, so a finance session is reconstructable from the tape like any other sequence of operations.
+
+`runAmortize(summarize)` calls `FIN.generateAmortRows()`, builds the header/summary text from the current registers and settings (including the optional `#finLabel` text input as a title line), and writes the whole schedule to the tape via `RPN.logAmortText()`/`RPN.logAmortRow()` before switching back to the Tape tab to show it.
 
 ### Collapsible tray
 
@@ -198,11 +237,15 @@ Any static host works (Vercel, GitHub Pages, S3+CloudFront, etc.) — Netlify is
 The `RPN` module's Node-exportability means it can be tested without a browser or DOM shim:
 
 ```js
-const RPN = require('./app.js');
+const { RPN, FIN } = require('./app.js');
 RPN.clearAll();
 RPN.inputDigit('3'); RPN.enter();
 RPN.inputDigit('4'); RPN.binaryOp('add');
 console.log(RPN.getStack()); // [7]
+
+FIN.setReg('n', 360); FIN.setReg('iYr', 6.5);
+FIN.setReg('pv', 300000); FIN.setReg('fv', 0);
+console.log(FIN.solve('pmt').value); // ~ -1896.20
 ```
 
 A test pass covering basic arithmetic, non-commutative operand order, trig with angle mode, implicit-push behavior (functions/operators auto-push a pending `entry`), swap/drop, divide-by-zero error formatting, bare-Enter duplication, and backspace editing was run against this module during development — all cases passed.
@@ -214,5 +257,6 @@ A test pass covering basic arithmetic, non-commutative operand order, trig with 
 - **Undo:** the tape (`history`) is an append-only log for display/export, not a snapshot stack, so it can't drive undo as-is. True undo would need a separate stack of `stack`/`entry` snapshots taken before each mutating call.
 - **CSV/XLSX export:** `exportTape()` already isolates all the formatting logic in one function — swapping the plain-text `join("\n")` for comma-separated rows (or a library like SheetJS for a real `.xlsx`) wouldn't touch the logging side at all.
 - **More conversion categories/units:** purely a data change — add entries to `CONVERSIONS` (and `CATEGORY_LABELS` for a new category). No UI code changes needed; `renderConvertCategories()`/`renderConvertGrid()` read the table directly.
-- **Currency conversion:** the one conversion category that can't be a static factor, since rates change daily. Would need a `fetch()` to a free rate API (e.g. Frankfurter.app, no key required), cached in memory with a timestamp so it isn't re-fetched on every button click, and a fallback for when the app is offline (the rest of the calculator works with no network at all, so this would be the first feature that doesn't).
+- **Currency conversion:** implemented - see "Live currency rates" above.
+- **Financial functions beyond TVM:** the `FIN` module's 5-register solver and amortization generator cover loans, mortgages, and simple savings goals. True NPV/IRR (a list of uneven cash flows, rather than a fixed payment) is a genuinely different, bigger feature - it needs its own cash-flow-list input UI, not just a wider `FIN_REGS` table - as would bond pricing or depreciation schedules.
 - **More themes:** add another `[data-theme="..."]` block in `styles.css` redeclaring the full variable set with new values, then add its `{ id, label }` to the `THEMES` array in `app.js`. No other code changes needed — the toggle button and `localStorage` persistence already iterate over that array.
